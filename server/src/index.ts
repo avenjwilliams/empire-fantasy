@@ -23,16 +23,6 @@ const app = express();
 const db = initDb();
 seedLeagueTypes(db);
 
-// Auto-seed player data on first boot if DB is empty
-const assetCount = (db.prepare('SELECT COUNT(*) as c FROM assets').get() as any).c;
-if (assetCount === 0) {
-  console.log('Empty database detected — running auto-seed...');
-  const { seed } = await import('./services/seedService.js');
-  const dataDir = process.env.DATA_DIR || path.resolve(__dirname, '../../data');
-  seed(db, { fixturesMode: true, dataDir });
-  console.log('Auto-seed complete.');
-}
-
 // Middleware
 app.use(cors({ origin: 'http://localhost:5173', credentials: true }));
 app.use(express.json());
@@ -60,8 +50,18 @@ if (isProduction) {
   });
 }
 
-app.listen(PORT, '0.0.0.0', () => {
+// Start listening FIRST so Fly proxy can connect, then auto-seed if needed
+app.listen(PORT, '0.0.0.0', async () => {
   console.log(`Empire Fantasy server running on port ${PORT}`);
+
+  const assetCount = (db.prepare('SELECT COUNT(*) as c FROM assets').get() as any).c;
+  if (assetCount === 0) {
+    console.log('Empty database detected — running auto-seed...');
+    const { seed } = await import('./services/seedService.js');
+    const dataDir = process.env.DATA_DIR || path.resolve(__dirname, '../../data');
+    await seed(db, { fixturesMode: false, dataDir });
+    console.log('Auto-seed complete.');
+  }
 });
 
 export default app;

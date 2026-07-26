@@ -35,7 +35,8 @@ interface SeedConfig {
 }
 
 const VALID_POSITIONS: Position[] = ['QB', 'RB', 'WR', 'TE'];
-const MAX_PLAYERS = 400;
+const MAX_PLAYERS = 800;
+const SLEEPER_PLAYERS_URL = 'https://api.sleeper.app/v1/players/nfl';
 
 // ------ Rank → Value Curve ------
 
@@ -52,12 +53,14 @@ export function rankToValue(rank: number, totalPlayers: number): number {
 
 // ------ Player Loading ------
 
-function loadSleeperPlayers(config: SeedConfig): SleeperPlayer[] {
-  const filePath = config.fixturesMode
-    ? path.join(config.dataDir, 'fixtures/sleeper-players.sample.json')
-    : path.join(config.dataDir, 'raw/sleeper-players.json');
+async function fetchSleeperPlayersFromAPI(): Promise<Record<string, any>> {
+  console.log('  Fetching players from Sleeper API...');
+  const res = await fetch(SLEEPER_PLAYERS_URL);
+  if (!res.ok) throw new Error(`Sleeper API returned ${res.status}`);
+  return res.json();
+}
 
-  const raw = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+function parseSleeperPlayers(raw: Record<string, any>): SleeperPlayer[] {
   const players: SleeperPlayer[] = [];
 
   for (const [, p] of Object.entries(raw) as [string, any][]) {
@@ -82,6 +85,29 @@ function loadSleeperPlayers(config: SeedConfig): SleeperPlayer[] {
 
   players.sort((a, b) => a.search_rank - b.search_rank);
   return players.slice(0, MAX_PLAYERS);
+}
+
+async function loadSleeperPlayers(config: SeedConfig): Promise<SleeperPlayer[]> {
+  let raw: Record<string, any>;
+
+  if (config.fixturesMode) {
+    const filePath = path.join(config.dataDir, 'fixtures/sleeper-players.sample.json');
+    raw = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+  } else {
+    // Try local cache first, then fetch from API
+    const cachePath = path.join(config.dataDir, 'raw/sleeper-players.json');
+    if (fs.existsSync(cachePath)) {
+      raw = JSON.parse(fs.readFileSync(cachePath, 'utf-8'));
+    } else {
+      raw = await fetchSleeperPlayersFromAPI();
+      // Cache for next time (create dir if needed)
+      const dir = path.dirname(cachePath);
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(cachePath, JSON.stringify(raw));
+    }
+  }
+
+  return parseSleeperPlayers(raw);
 }
 
 // ------ Seed Rankings Loading ------
@@ -132,7 +158,7 @@ function matchPlayer(
 
 // ------ Main Seed Function ------
 
-export function seed(db: Database.Database, config: SeedConfig): void {
+export async function seed(db: Database.Database, config: SeedConfig): Promise<void> {
   const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
   const today = new Date().toISOString().slice(0, 10);
 
@@ -141,7 +167,7 @@ export function seed(db: Database.Database, config: SeedConfig): void {
 
   // Step 1: Load and insert players
   console.log('\n[1/7] Loading players...');
-  const sleeperPlayers = loadSleeperPlayers(config);
+  const sleeperPlayers = await loadSleeperPlayers(config);
   console.log(`  Found ${sleeperPlayers.length} eligible players`);
 
   const insertPlayer = db.prepare(`

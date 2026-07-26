@@ -16,7 +16,7 @@ const db = initDb(dbPath);
 // Ensure league types are seeded first
 seedLeagueTypes(db);
 
-seed(db, {
+await seed(db, {
   fixturesMode,
   dataDir: path.join(PROJECT_ROOT, 'data'),
 });
