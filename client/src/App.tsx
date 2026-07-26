@@ -4,6 +4,7 @@ import Rankings from './pages/Rankings.js';
 import PlayerDetail from './pages/PlayerDetail.js';
 import Log from './pages/Log.js';
 import Calculator from './pages/Calculator.js';
+import KeepTradeCut from './pages/KeepTradeCut.js';
 
 export default function App() {
   return (
@@ -23,19 +24,10 @@ export default function App() {
           <Route path="/" element={<Calculator />} />
           <Route path="/rankings" element={<Rankings />} />
           <Route path="/player/:assetId" element={<PlayerDetail />} />
-          <Route path="/ktc" element={<Placeholder name="Keep / Trade / Cut" />} />
+          <Route path="/ktc" element={<KeepTradeCut />} />
           <Route path="/log" element={<Log />} />
         </Routes>
       </main>
     </>
-  );
-}
-
-function Placeholder({ name }: { name: string }) {
-  return (
-    <div className="page">
-      <h1 className="page__title">{name}</h1>
-      <p className="text-muted">Coming in a later phase.</p>
-    </div>
   );
 }

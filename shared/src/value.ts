@@ -1,5 +1,20 @@
 import type { TradeAsset, TradeSide, TradeResult, Verdict } from './types.js';
 
+// =====================================================
+// Constants
+// =====================================================
+
+export const VOTE_CONSTANTS = {
+  /** Elo K-factor per pairwise comparison */
+  K: 0.20,
+  /** Dampened K when asset has >30 votes in trailing 7 days */
+  K_DAMPENED: 0.10,
+  /** Elo scale divisor (±6 spread ≈ 24–76% expectation) */
+  ELO_SCALE: 12,
+  /** Dampening threshold: votes in trailing 7 days */
+  DAMPEN_THRESHOLD: 30,
+} as const;
+
 export const TRADE_CONSTANTS = {
   EXP: 2.6,
   DEPTH_WEIGHTS: [1.0, 0.9, 0.8, 0.65, 0.5, 0.4, 0.3],
@@ -128,5 +143,65 @@ export function evaluateTrade(input: EvaluateTradeInput): TradeResult {
     verdict: verdictLabel,
     differencePct,
     adviceGap,
+  };
+}
+
+// =====================================================
+// Vote (KTC) Math
+// =====================================================
+
+export interface PairwiseDelta {
+  winnerId: number;
+  loserId: number;
+  winnerDelta: number;
+  loserDelta: number;
+}
+
+/**
+ * Compute the Elo-style delta for a single pairwise comparison.
+ * Winner's value should increase, loser's should decrease.
+ * K may be dampened per asset externally.
+ */
+export function computePairwiseDelta(
+  winnerValue: number,
+  loserValue: number,
+  k: number = VOTE_CONSTANTS.K,
+): number {
+  const expected = 1 / (1 + Math.pow(10, (loserValue - winnerValue) / VOTE_CONSTANTS.ELO_SCALE));
+  return k * (1 - expected);
+}
+
+/**
+ * Apply a full KTC vote (KEEP > TRADE > CUT) to three assets.
+ * Returns the net delta for each asset (before clamp/round).
+ *
+ * Pairs: (keep, trade), (keep, cut), (trade, cut)
+ * Each pair: winner gets +delta, loser gets -delta.
+ * Net per asset is sum of their two pairwise results.
+ */
+export function computeVoteDeltas(
+  keepValue: number,
+  tradeValue: number,
+  cutValue: number,
+  kKeep: number = VOTE_CONSTANTS.K,
+  kTrade: number = VOTE_CONSTANTS.K,
+  kCut: number = VOTE_CONSTANTS.K,
+): { keepDelta: number; tradeDelta: number; cutDelta: number } {
+  // (keep beats trade): use min K of the two involved assets
+  const k_kt = Math.min(kKeep, kTrade);
+  const d_kt = computePairwiseDelta(keepValue, tradeValue, k_kt);
+
+  // (keep beats cut)
+  const k_kc = Math.min(kKeep, kCut);
+  const d_kc = computePairwiseDelta(keepValue, cutValue, k_kc);
+
+  // (trade beats cut)
+  const k_tc = Math.min(kTrade, kCut);
+  const d_tc = computePairwiseDelta(tradeValue, cutValue, k_tc);
+
+  return {
+    keepDelta:  d_kt + d_kc,       // wins both
+    tradeDelta: -d_kt + d_tc,      // loses to keep, beats cut
+    cutDelta:   -d_kc - d_tc,      // loses both
   };
 }

@@ -9,6 +9,7 @@ import rankingsRouter from './routes/rankings.js';
 import assetsRouter from './routes/assets.js';
 import logRouter from './routes/log.js';
 import tradeRouter from './routes/trade.js';
+import ktcRouter from './routes/ktc.js';
 
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3001;
 
@@ -34,6 +35,7 @@ app.use('/api/rankings', rankingsRouter);
 app.use('/api/assets', assetsRouter);
 app.use('/api/log', logRouter);
 app.use('/api/trade', tradeRouter);
+app.use('/api/ktc', ktcRouter);
 
 app.listen(PORT, () => {
   console.log(`Empire Fantasy server running on port ${PORT}`);

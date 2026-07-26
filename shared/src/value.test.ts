@@ -6,6 +6,9 @@ import {
   getVerdict,
   evaluateTrade,
   TRADE_CONSTANTS,
+  VOTE_CONSTANTS,
+  computePairwiseDelta,
+  computeVoteDeltas,
 } from './value.js';
 
 describe('value.ts', () => {
@@ -256,6 +259,89 @@ describe('value.ts', () => {
         team2: [{ id: 2, name: 'B', value: 75.0 }],
       });
       expect(result.adviceGap).toBeNull();
+    });
+  });
+
+  describe('computePairwiseDelta', () => {
+    it('returns positive delta (winner gains)', () => {
+      const d = computePairwiseDelta(60, 55);
+      expect(d).toBeGreaterThan(0);
+    });
+
+    it('upset (lower-valued wins) produces larger delta', () => {
+      const chalk = computePairwiseDelta(60, 55);   // expected winner wins
+      const upset = computePairwiseDelta(55, 60);   // underdog wins
+      expect(upset).toBeGreaterThan(chalk);
+    });
+
+    it('equal values produce delta of K/2', () => {
+      const d = computePairwiseDelta(50, 50);
+      expect(d).toBeCloseTo(VOTE_CONSTANTS.K / 2, 6);
+    });
+
+    it('delta is always between 0 and K', () => {
+      for (let w = 10; w <= 90; w += 10) {
+        for (let l = 10; l <= 90; l += 10) {
+          const d = computePairwiseDelta(w, l);
+          expect(d).toBeGreaterThanOrEqual(0);
+          expect(d).toBeLessThanOrEqual(VOTE_CONSTANTS.K);
+        }
+      }
+    });
+  });
+
+  describe('computeVoteDeltas', () => {
+    it('keep gains, cut loses, trade is in between', () => {
+      const { keepDelta, tradeDelta, cutDelta } = computeVoteDeltas(60, 55, 50);
+      expect(keepDelta).toBeGreaterThan(0);
+      expect(cutDelta).toBeLessThan(0);
+      // trade: loses to keep but beats cut — could be positive or negative
+      expect(tradeDelta).toBeGreaterThan(cutDelta);
+      expect(tradeDelta).toBeLessThan(keepDelta);
+    });
+
+    it('net deltas sum to approximately zero (zero-sum)', () => {
+      const { keepDelta, tradeDelta, cutDelta } = computeVoteDeltas(70, 65, 60);
+      expect(keepDelta + tradeDelta + cutDelta).toBeCloseTo(0, 10);
+    });
+
+    it('max movement per asset ≤ 0.4 at standard K', () => {
+      // Test across a range of value spreads
+      for (let anchor = 20; anchor <= 90; anchor += 10) {
+        for (let spread = 0; spread <= 6; spread += 2) {
+          const { keepDelta, cutDelta } = computeVoteDeltas(
+            anchor + spread, anchor, anchor - spread,
+          );
+          // keep and cut have the largest absolute movement (2 pairwise)
+          expect(Math.abs(keepDelta)).toBeLessThanOrEqual(0.4);
+          expect(Math.abs(cutDelta)).toBeLessThanOrEqual(0.4);
+        }
+      }
+    });
+
+    it('dampened K produces smaller deltas', () => {
+      const normal = computeVoteDeltas(60, 55, 50);
+      const dampened = computeVoteDeltas(
+        60, 55, 50,
+        VOTE_CONSTANTS.K_DAMPENED,
+        VOTE_CONSTANTS.K_DAMPENED,
+        VOTE_CONSTANTS.K_DAMPENED,
+      );
+      expect(Math.abs(dampened.keepDelta)).toBeLessThan(Math.abs(normal.keepDelta));
+      expect(Math.abs(dampened.cutDelta)).toBeLessThan(Math.abs(normal.cutDelta));
+    });
+
+    it('partial dampening (one asset dampened) still limits that asset', () => {
+      // Only keep is dampened
+      const { keepDelta } = computeVoteDeltas(
+        60, 55, 50,
+        VOTE_CONSTANTS.K_DAMPENED, // keep dampened
+        VOTE_CONSTANTS.K,
+        VOTE_CONSTANTS.K,
+      );
+      // keep's delta should be smaller than with full K
+      const full = computeVoteDeltas(60, 55, 50);
+      expect(Math.abs(keepDelta)).toBeLessThan(Math.abs(full.keepDelta));
     });
   });
 });
