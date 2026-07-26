@@ -594,6 +594,43 @@ a:hover { text-decoration: underline; }
   .calc-grid { grid-template-columns: 1fr; }
 }
 
+/* ---- Value Chart ---- */
+.chart-container {
+  background: var(--bg-raised);
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1rem 0.5rem 0.5rem 0;
+  margin-bottom: 2rem;
+}
+
+.chart-empty {
+  background: var(--bg-raised);
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+  padding: 2rem;
+  text-align: center;
+  color: var(--ink-muted);
+  margin-bottom: 2rem;
+  font-size: 0.85rem;
+}
+
+/* ---- Empty / Error States ---- */
+.empty-state {
+  text-align: center;
+  padding: 2.5rem 1rem;
+  color: var(--ink-muted);
+  font-size: 0.9rem;
+  border: 2px dashed var(--border);
+  border-radius: var(--radius);
+  margin: 1rem 0;
+}
+
+/* ---- Table Scroll Wrapper ---- */
+.table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
 /* ---- Utility ---- */
 .text-muted { color: var(--ink-muted); }
 .text-accent { color: var(--accent); }
@@ -718,11 +755,39 @@ a:hover { text-decoration: underline; }
 }
 
 /* ---- Responsive ---- */
+
+/* Tablet */
 @media (max-width: 768px) {
   .topbar { padding: 0.5rem 1rem; gap: 0.75rem; }
-  .lt-selector { margin-left: 0; width: 100%; }
+  .topbar__nav { order: 3; width: 100%; }
+  .topbar__nav a { flex: 1; text-align: center; padding: 0.4rem 0.25rem; font-size: 0.75rem; }
+  .lt-selector { margin-left: 0; width: 100%; justify-content: center; }
   .page { padding: 1rem; }
   .value-grid { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); }
   .ktc-cards { grid-template-columns: 1fr; }
   .calc-grid { grid-template-columns: 1fr; }
+  .detail-header { flex-wrap: wrap; }
+  .detail-header__name { font-size: 1.1rem; }
+  .calc-result__details { flex-direction: column; gap: 0.5rem; align-items: center; }
+  .data-table th { position: static; } /* disable sticky header on mobile for scroll */
+  .filters { gap: 0.4rem; }
+  .filter-tabs { overflow-x: auto; flex-shrink: 0; }
+  .search-input { min-width: 0; flex: 1; }
+}
+
+/* Phone */
+@media (max-width: 480px) {
+  html { font-size: 13px; }
+  .topbar__brand { font-size: 0.95rem; letter-spacing: 0.1em; }
+  .lt-selector { gap: 0.35rem; }
+  .lt-group button { padding: 0.2rem 0.4rem; font-size: 0.65rem; }
+  .page { padding: 0.75rem; }
+  .page__title { font-size: 1rem; }
+  .value-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 0.35rem; }
+  .value-card { padding: 0.35rem 0.5rem; }
+  .value-card__code { font-size: 0.6rem; }
+  .ktc-card { padding: 1rem 0.75rem; }
+  .ktc-card__name { font-size: 0.9rem; }
+  .pagination { flex-wrap: wrap; justify-content: center; }
+  .chart-container { padding: 0.5rem 0 0.25rem 0; }
 }

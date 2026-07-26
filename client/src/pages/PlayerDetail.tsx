@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useLeagueType } from '../context/LeagueTypeContext.js';
+import ValueChart from '../components/ValueChart.js';
 
 interface ValueEntry {
   leagueType: string;
@@ -31,7 +32,7 @@ interface AssetDetail {
   age: number | null;
   status: string | null;
   values: ValueEntry[];
-  history: any[];
+  history: { date: string; value: number; leagueType: string }[];
   logs: LogEntry[];
 }
 
@@ -54,7 +55,7 @@ export default function PlayerDetail() {
   }, [assetId, code]);
 
   if (loading) return <div className="page"><p className="text-muted">Loading...</p></div>;
-  if (!data) return <div className="page"><p className="text-muted">Asset not found.</p></div>;
+  if (!data) return <div className="page"><div className="empty-state">Asset not found.</div></div>;
 
   const currentValue = data.values.find(v => v.leagueType === code);
 
@@ -100,21 +101,16 @@ export default function PlayerDetail() {
         ))}
       </div>
 
-      {/* Chart stub */}
+      {/* Value History Chart */}
       <h2 className="page__title" style={{ fontSize: '0.9rem' }}>Value History</h2>
-      <div style={{
-        background: 'var(--bg-raised)', border: '2px solid var(--border)',
-        borderRadius: 'var(--radius)', padding: '2rem', textAlign: 'center',
-        color: 'var(--ink-muted)', marginBottom: '2rem',
-      }}>
-        Chart available once history accumulates
-      </div>
+      <ValueChart history={data.history} leagueType={code} />
 
       {/* Recent log entries */}
       <h2 className="page__title" style={{ fontSize: '0.9rem' }}>Recent Adjustments</h2>
       {data.logs.length === 0 ? (
-        <p className="text-muted">No adjustments recorded.</p>
+        <div className="empty-state">No adjustments recorded yet.</div>
       ) : (
+        <div className="table-scroll">
         <table className="data-table">
           <thead>
             <tr>
@@ -154,6 +150,7 @@ export default function PlayerDetail() {
             ))}
           </tbody>
         </table>
+        </div>
       )}
     </div>
   );

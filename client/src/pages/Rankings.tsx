@@ -24,6 +24,7 @@ export default function Rankings() {
   const [posFilter, setPosFilter] = useState('ALL');
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const tabs = format === 'DYN' ? [...POSITION_TABS, 'PICKS'] : POSITION_TABS;
 
@@ -33,10 +34,19 @@ export default function Rankings() {
     if (posFilter !== 'ALL') params.set('position', posFilter);
 
     fetch(`/api/rankings?${params}`)
-      .then(r => r.json())
+      .then(r => {
+        if (!r.ok) throw new Error('Failed to load rankings');
+        return r.json();
+      })
       .then(data => {
         setRows(data);
         setLoading(false);
+        setError(null);
+      })
+      .catch(() => {
+        setRows([]);
+        setLoading(false);
+        setError('Failed to load rankings. Is the server running?');
       });
   }, [code, posFilter]);
 
@@ -71,40 +81,48 @@ export default function Rankings() {
 
       {loading ? (
         <p className="text-muted">Loading...</p>
+      ) : error ? (
+        <div className="empty-state">{error}</div>
+      ) : filtered.length === 0 ? (
+        <div className="empty-state">
+          {search ? `No players matching "${search}"` : 'No rankings found for this league type.'}
+        </div>
       ) : (
-        <table className="data-table">
-          <thead>
-            <tr>
-              <th className="col-rank">#</th>
-              <th className="col-pos-rank">Pos</th>
-              <th>Name</th>
-              <th className="col-pos">Pos</th>
-              <th>Team</th>
-              <th>Age</th>
-              <th className="col-value">Value</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map(row => (
-              <tr
-                key={row.asset_id}
-                onClick={() => navigate(`/player/${row.asset_id}`)}
-              >
-                <td className="col-rank">{row.overallRank}</td>
-                <td className="col-pos-rank">{row.positionalLabel}</td>
-                <td>{row.name}</td>
-                <td className="col-pos">
-                  <span className={`pos-badge pos-badge--${row.position}`}>
-                    {row.position}
-                  </span>
-                </td>
-                <td>{row.team || '—'}</td>
-                <td>{row.age ?? '—'}</td>
-                <td className="col-value">{row.value.toFixed(1)}</td>
+        <div className="table-scroll">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th className="col-rank">#</th>
+                <th className="col-pos-rank">Pos</th>
+                <th>Name</th>
+                <th className="col-pos">Pos</th>
+                <th>Team</th>
+                <th>Age</th>
+                <th className="col-value">Value</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {filtered.map(row => (
+                <tr
+                  key={row.asset_id}
+                  onClick={() => navigate(`/player/${row.asset_id}`)}
+                >
+                  <td className="col-rank">{row.overallRank}</td>
+                  <td className="col-pos-rank">{row.positionalLabel}</td>
+                  <td>{row.name}</td>
+                  <td className="col-pos">
+                    <span className={`pos-badge pos-badge--${row.position}`}>
+                      {row.position}
+                    </span>
+                  </td>
+                  <td>{row.team || '—'}</td>
+                  <td>{row.age ?? '—'}</td>
+                  <td className="col-value">{row.value.toFixed(1)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   );

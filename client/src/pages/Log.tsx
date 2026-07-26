@@ -28,6 +28,7 @@ export default function Log() {
   const [reasonFilter, setReasonFilter] = useState('all');
   const [assetSearch, setAssetSearch] = useState('');
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     setLoading(true);
@@ -39,11 +40,21 @@ export default function Log() {
     if (reasonFilter !== 'all') params.set('reason', reasonFilter);
 
     fetch(`/api/log?${params}`)
-      .then(r => r.json())
+      .then(r => {
+        if (!r.ok) throw new Error('Failed to load log');
+        return r.json();
+      })
       .then(data => {
         setRows(data.rows);
         setTotal(data.total);
         setLoading(false);
+        setError(null);
+      })
+      .catch(() => {
+        setRows([]);
+        setTotal(0);
+        setLoading(false);
+        setError('Failed to load adjustment log. Is the server running?');
       });
   }, [code, reasonFilter, offset]);
 
@@ -85,8 +96,15 @@ export default function Log() {
 
       {loading ? (
         <p className="text-muted">Loading...</p>
+      ) : error ? (
+        <div className="empty-state">{error}</div>
+      ) : filtered.length === 0 ? (
+        <div className="empty-state">
+          {assetSearch ? `No log entries matching "${assetSearch}"` : 'No adjustment log entries found.'}
+        </div>
       ) : (
         <>
+          <div className="table-scroll">
           <table className="data-table">
             <thead>
               <tr>
@@ -135,6 +153,7 @@ export default function Log() {
               ))}
             </tbody>
           </table>
+          </div>
 
           <div className="pagination">
             <button disabled={offset === 0} onClick={() => setOffset(o => o - PAGE_SIZE)}>
