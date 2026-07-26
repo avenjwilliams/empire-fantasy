@@ -91,8 +91,8 @@ export default function ValueChart({ history, leagueType }: ValueChartProps) {
               fontSize: 12,
               color: CHART_COLORS.ink,
             }}
-            labelFormatter={(label: string) => label}
-            formatter={(val: number) => [val.toFixed(1), 'Value']}
+            labelFormatter={(label) => String(label)}
+            formatter={(val) => [Number(val).toFixed(1), 'Value']}
           />
           <Line
             type="monotone"

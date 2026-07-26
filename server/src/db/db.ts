@@ -16,7 +16,7 @@ export function getDb(): Database.Database {
 }
 
 export function initDb(dbPath?: string): Database.Database {
-  const resolvedPath = dbPath || path.join(process.cwd(), 'empire-fantasy.db');
+  const resolvedPath = dbPath || process.env.DATABASE_PATH || path.join(process.cwd(), 'empire-fantasy.db');
   db = new Database(resolvedPath);
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');

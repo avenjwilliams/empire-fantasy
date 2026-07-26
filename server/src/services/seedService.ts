@@ -76,24 +76,12 @@ function loadSleeperPlayers(config: SeedConfig): SleeperPlayer[] {
       team: p.team || null,
       age: p.age || null,
       status: p.status || 'Active',
+      search_rank: p.search_rank ?? 9999,
     });
   }
 
-  // Sort by search_rank (lower = better) and take top N
-  players.sort((a, b) => (a as any).search_rank - (b as any).search_rank);
-
-  // Reload with search_rank for sorting
-  const withRank: (SleeperPlayer & { search_rank: number })[] = [];
-  for (const [, p] of Object.entries(raw) as [string, any][]) {
-    if (!VALID_POSITIONS.includes(p.position)) continue;
-    if (!p.full_name) continue;
-    const hasTeam = p.team != null;
-    const isNotable = (p.search_rank ?? 9999) < 500;
-    if (!hasTeam && !isNotable) continue;
-    withRank.push({ ...p, player_id: p.player_id, full_name: p.full_name, position: p.position, team: p.team || null, age: p.age || null, status: p.status || 'Active', search_rank: p.search_rank ?? 9999 });
-  }
-  withRank.sort((a, b) => a.search_rank - b.search_rank);
-  return withRank.slice(0, MAX_PLAYERS);
+  players.sort((a, b) => a.search_rank - b.search_rank);
+  return players.slice(0, MAX_PLAYERS);
 }
 
 // ------ Seed Rankings Loading ------

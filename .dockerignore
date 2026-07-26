@@ -1,0 +1,9 @@
+node_modules
+.git
+.claude
+*.db
+*.db-shm
+*.db-wal
+data/raw
+data/rankings
+.git-credentials
