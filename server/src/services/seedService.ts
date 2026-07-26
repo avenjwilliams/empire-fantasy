@@ -138,8 +138,15 @@ function loadSeedRankings(config: SeedConfig): SeedRankingRow[] {
   return rows;
 }
 
+const NAME_SUFFIXES = /\b(jr|sr|ii|iii|iv|v)\b/g;
+
+function normalizeName(name: string): string {
+  return name.toLowerCase().replace(/[^a-z ]/g, '').replace(NAME_SUFFIXES, '').replace(/\s+/g, ' ').trim();
+}
+
 /**
  * Fuzzy match a seed ranking name to a DB player.
+ * Strips suffixes (Jr, III, etc.) so "Kenneth Walker III" matches "Kenneth Walker".
  * Returns player ID or null.
  */
 function matchPlayer(
@@ -147,7 +154,7 @@ function matchPlayer(
   position: string,
   playersByName: Map<string, { id: number; position: string }[]>
 ): number | null {
-  const normalized = name.toLowerCase().replace(/[^a-z ]/g, '').trim();
+  const normalized = normalizeName(name);
   const candidates = playersByName.get(normalized);
   if (candidates) {
     const posMatch = candidates.find(c => c.position === position);
@@ -209,7 +216,7 @@ export async function seed(db: Database.Database, config: SeedConfig): Promise<v
   const allPlayers = db.prepare('SELECT id, name, position FROM players').all() as { id: number; name: string; position: string }[];
   const playersByName = new Map<string, { id: number; position: string }[]>();
   for (const p of allPlayers) {
-    const key = p.name.toLowerCase().replace(/[^a-z ]/g, '').trim();
+    const key = normalizeName(p.name);
     const arr = playersByName.get(key) || [];
     arr.push({ id: p.id, position: p.position });
     playersByName.set(key, arr);
