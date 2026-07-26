@@ -1,0 +1,21 @@
+{
+  "name": "empire-fantasy",
+  "private": true,
+  "workspaces": ["shared", "server", "client"],
+  "scripts": {
+    "dev": "concurrently \"npm run dev -w server\" \"npm run dev -w client\"",
+    "build": "npm run build -w shared && npm run build -w server && npm run build -w client",
+    "test": "vitest run",
+    "seed": "tsx scripts/seed.ts",
+    "stats:week": "tsx scripts/ingest-week.ts",
+    "rankings:export": "tsx scripts/export-rankings.ts",
+    "rankings:import": "tsx scripts/import-rankings.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "concurrently": "^8.2.2",
+    "tsx": "^4.16.0",
+    "typescript": "^5.5.0",
+    "vitest": "^2.0.0"
+  }
+}

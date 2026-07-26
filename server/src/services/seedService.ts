@@ -1,0 +1,444 @@
+import type Database from 'better-sqlite3';
+import fs from 'fs';
+import path from 'path';
+import {
+  clampRound,
+  RANK_DECAY_K,
+  SCORING_MULTIPLIERS,
+  PICK_VALUES,
+  PICK_YEAR_DECAY,
+  PICK_SF_FIRST_ROUND_MULTIPLIER,
+  PICK_YEARS,
+} from '@empire-fantasy/shared';
+import type { Position, Format, QBSetting, PickTier } from '@empire-fantasy/shared';
+
+interface SleeperPlayer {
+  player_id: string;
+  full_name: string;
+  position: string;
+  team: string | null;
+  age: number | null;
+  status: string;
+  search_rank: number;
+}
+
+interface SeedRankingRow {
+  rank: number;
+  name: string;
+  position: string;
+  team: string;
+}
+
+interface SeedConfig {
+  fixturesMode: boolean;
+  dataDir: string;
+}
+
+const VALID_POSITIONS: Position[] = ['QB', 'RB', 'WR', 'TE'];
+const MAX_PLAYERS = 400;
+
+// ------ Rank → Value Curve ------
+
+/**
+ * Convert rank (1-based) to value (1.0-100.0).
+ * Uses exponential decay: value = 100 * exp(-k * (rank-1) / N)
+ * Tuned so rank 1 ≈ 100, rank ~50 ≈ 65, rank ~200 ≈ 15.
+ */
+export function rankToValue(rank: number, totalPlayers: number): number {
+  const N = totalPlayers;
+  const raw = 100 * Math.exp(-RANK_DECAY_K * (rank - 1) / N);
+  return clampRound(raw);
+}
+
+// ------ Player Loading ------
+
+function loadSleeperPlayers(config: SeedConfig): SleeperPlayer[] {
+  const filePath = config.fixturesMode
+    ? path.join(config.dataDir, 'fixtures/sleeper-players.sample.json')
+    : path.join(config.dataDir, 'raw/sleeper-players.json');
+
+  const raw = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+  const players: SleeperPlayer[] = [];
+
+  for (const [, p] of Object.entries(raw) as [string, any][]) {
+    if (!VALID_POSITIONS.includes(p.position)) continue;
+    if (!p.full_name) continue;
+
+    // Filter: must have a team or be notable (low search_rank)
+    const hasTeam = p.team != null;
+    const isNotable = (p.search_rank ?? 9999) < 500;
+    if (!hasTeam && !isNotable) continue;
+
+    players.push({
+      player_id: p.player_id,
+      full_name: p.full_name,
+      position: p.position,
+      team: p.team || null,
+      age: p.age || null,
+      status: p.status || 'Active',
+    });
+  }
+
+  // Sort by search_rank (lower = better) and take top N
+  players.sort((a, b) => (a as any).search_rank - (b as any).search_rank);
+
+  // Reload with search_rank for sorting
+  const withRank: (SleeperPlayer & { search_rank: number })[] = [];
+  for (const [, p] of Object.entries(raw) as [string, any][]) {
+    if (!VALID_POSITIONS.includes(p.position)) continue;
+    if (!p.full_name) continue;
+    const hasTeam = p.team != null;
+    const isNotable = (p.search_rank ?? 9999) < 500;
+    if (!hasTeam && !isNotable) continue;
+    withRank.push({ ...p, player_id: p.player_id, full_name: p.full_name, position: p.position, team: p.team || null, age: p.age || null, status: p.status || 'Active', search_rank: p.search_rank ?? 9999 });
+  }
+  withRank.sort((a, b) => a.search_rank - b.search_rank);
+  return withRank.slice(0, MAX_PLAYERS);
+}
+
+// ------ Seed Rankings Loading ------
+
+function loadSeedRankings(config: SeedConfig): SeedRankingRow[] {
+  // Try manual CSVs first, then fixture
+  const manualPath = path.join(config.dataDir, 'raw/seed-rankings/DYN_1QB.csv');
+  const fixturePath = path.join(config.dataDir, 'fixtures/seed-rankings.sample.csv');
+
+  const csvPath = config.fixturesMode
+    ? fixturePath
+    : (fs.existsSync(manualPath) ? manualPath : fixturePath);
+
+  const content = fs.readFileSync(csvPath, 'utf-8');
+  const lines = content.trim().split('\n');
+  const rows: SeedRankingRow[] = [];
+
+  for (let i = 1; i < lines.length; i++) {
+    const parts = lines[i].split(',');
+    if (parts.length < 4) continue;
+    rows.push({
+      rank: parseInt(parts[0], 10),
+      name: parts[1].trim(),
+      position: parts[2].trim(),
+      team: parts[3].trim(),
+    });
+  }
+  return rows;
+}
+
+/**
+ * Fuzzy match a seed ranking name to a DB player.
+ * Returns player ID or null.
+ */
+function matchPlayer(
+  name: string,
+  position: string,
+  playersByName: Map<string, { id: number; position: string }[]>
+): number | null {
+  const normalized = name.toLowerCase().replace(/[^a-z ]/g, '').trim();
+  const candidates = playersByName.get(normalized);
+  if (candidates) {
+    const posMatch = candidates.find(c => c.position === position);
+    return posMatch?.id ?? candidates[0]?.id ?? null;
+  }
+  return null;
+}
+
+// ------ Main Seed Function ------
+
+export function seed(db: Database.Database, config: SeedConfig): void {
+  const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
+  const today = new Date().toISOString().slice(0, 10);
+
+  console.log('=== Empire Fantasy Seed ===');
+  console.log(`Mode: ${config.fixturesMode ? 'FIXTURES' : 'LIVE'}`);
+
+  // Step 1: Load and insert players
+  console.log('\n[1/7] Loading players...');
+  const sleeperPlayers = loadSleeperPlayers(config);
+  console.log(`  Found ${sleeperPlayers.length} eligible players`);
+
+  const insertPlayer = db.prepare(`
+    INSERT OR IGNORE INTO players (sleeper_id, name, position, team, age, status)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `);
+  const insertAsset = db.prepare(`
+    INSERT INTO assets (kind, player_id, pick_id) VALUES ('player', ?, NULL)
+  `);
+  const getPlayer = db.prepare('SELECT id FROM players WHERE sleeper_id = ?');
+
+  const insertPlayers = db.transaction(() => {
+    for (const p of sleeperPlayers) {
+      const status = p.status === 'Injured Reserve' ? 'injured'
+        : p.status === 'Inactive' ? 'inactive' : 'active';
+      insertPlayer.run(p.player_id, p.full_name, p.position, p.team, p.age, status);
+
+      const row = getPlayer.get(p.player_id) as { id: number } | undefined;
+      if (row) {
+        const existingAsset = db.prepare('SELECT id FROM assets WHERE player_id = ?').get(row.id);
+        if (!existingAsset) {
+          insertAsset.run(row.id);
+        }
+      }
+    }
+  });
+  insertPlayers();
+
+  const playerCount = (db.prepare('SELECT COUNT(*) as c FROM players').get() as any).c;
+  const assetCount = (db.prepare('SELECT COUNT(*) as c FROM assets WHERE kind = ?').get('player') as any).c;
+  console.log(`  Inserted: ${playerCount} players, ${assetCount} player assets`);
+
+  // Step 2: Load seed rankings for base set (DYN_1QB as baseline)
+  console.log('\n[2/7] Loading seed rankings...');
+  const seedRankings = loadSeedRankings(config);
+  console.log(`  ${seedRankings.length} ranked entries`);
+
+  // Build player lookup by normalized name
+  const allPlayers = db.prepare('SELECT id, name, position FROM players').all() as { id: number; name: string; position: string }[];
+  const playersByName = new Map<string, { id: number; position: string }[]>();
+  for (const p of allPlayers) {
+    const key = p.name.toLowerCase().replace(/[^a-z ]/g, '').trim();
+    const arr = playersByName.get(key) || [];
+    arr.push({ id: p.id, position: p.position });
+    playersByName.set(key, arr);
+  }
+
+  // Match rankings to players, assign values
+  type RankedPlayer = { playerId: number; assetId: number; position: Position; rank: number; value: number };
+  const rankedPlayers: RankedPlayer[] = [];
+  const unmatched: string[] = [];
+
+  for (const row of seedRankings) {
+    const playerId = matchPlayer(row.name, row.position, playersByName);
+    if (!playerId) {
+      unmatched.push(`${row.rank}: ${row.name} (${row.position})`);
+      continue;
+    }
+    const asset = db.prepare('SELECT id FROM assets WHERE player_id = ?').get(playerId) as { id: number } | undefined;
+    if (!asset) continue;
+
+    const value = rankToValue(row.rank, seedRankings.length);
+    rankedPlayers.push({
+      playerId,
+      assetId: asset.id,
+      position: row.position as Position,
+      rank: row.rank,
+      value,
+    });
+  }
+
+  if (unmatched.length > 0) {
+    console.log(`  WARNING: ${unmatched.length} unmatched rankings:`);
+    unmatched.slice(0, 5).forEach(u => console.log(`    ${u}`));
+    if (unmatched.length > 5) console.log(`    ... and ${unmatched.length - 5} more`);
+  }
+  console.log(`  Matched ${rankedPlayers.length} players to rankings`);
+
+  // Assign values to unranked players (give them minimum value based on position median)
+  const rankedIds = new Set(rankedPlayers.map(r => r.playerId));
+  const allAssets = db.prepare(`
+    SELECT a.id as asset_id, p.id as player_id, p.position
+    FROM assets a JOIN players p ON a.player_id = p.id
+  `).all() as { asset_id: number; player_id: number; position: string }[];
+
+  let nextRank = rankedPlayers.length + 1;
+  for (const a of allAssets) {
+    if (rankedIds.has(a.player_id)) continue;
+    const value = rankToValue(nextRank, allAssets.length);
+    rankedPlayers.push({
+      playerId: a.player_id,
+      assetId: a.asset_id,
+      position: a.position as Position,
+      rank: nextRank,
+      value,
+    });
+    nextRank++;
+  }
+
+  // Step 3: Generate values for all 4 base sets
+  console.log('\n[3/7] Computing 4 base sets...');
+  const leagueTypes = db.prepare('SELECT * FROM league_types').all() as {
+    id: number; code: string; format: string; qb: string; rec: string; tep: number;
+  }[];
+
+  // Base sets: DYN_1QB_PPR_STD, DYN_SF_PPR_STD, RED_1QB_PPR_STD, RED_SF_PPR_STD
+  const baseSetMap = new Map<string, Map<number, number>>(); // code -> assetId -> value
+
+  // DYN_1QB is our baseline from seed rankings
+  const baseValues = new Map<number, { value: number; position: Position }>();
+  for (const rp of rankedPlayers) {
+    baseValues.set(rp.assetId, { value: rp.value, position: rp.position });
+  }
+
+  // For SF sets: boost QBs by ~20-25% of gap to 100 (SF makes QBs much more valuable)
+  function computeSFValues(base: Map<number, { value: number; position: Position }>): Map<number, number> {
+    const sfMap = new Map<number, number>();
+    for (const [assetId, { value, position }] of base) {
+      if (position === 'QB') {
+        // Boost QB values in SF (top QBs are elite assets)
+        const boost = (100 - value) * 0.25;
+        sfMap.set(assetId, clampRound(value + boost));
+      } else {
+        // Slightly decrease non-QB values to make room
+        sfMap.set(assetId, clampRound(value * 0.97));
+      }
+    }
+    return sfMap;
+  }
+
+  // For RED sets: compress dynasty values (age/youth less relevant)
+  function computeRedraftValues(base: Map<number, { value: number; position: Position }>): Map<number, number> {
+    const redMap = new Map<number, number>();
+    // In redraft, current-year production matters more than youth
+    // Slightly compress the range (mid-tier players more valuable, top slightly less)
+    for (const [assetId, { value, position }] of base) {
+      const compressed = value > 70 ? value * 0.98 : value * 1.03;
+      redMap.set(assetId, clampRound(compressed));
+    }
+    return redMap;
+  }
+
+  // Build the 4 base sets
+  const dyn1qb = new Map<number, number>();
+  for (const [id, { value }] of baseValues) dyn1qb.set(id, value);
+  baseSetMap.set('DYN_1QB', dyn1qb);
+
+  const dynSF = computeSFValues(baseValues);
+  baseSetMap.set('DYN_SF', dynSF);
+
+  const red1qb = computeRedraftValues(baseValues);
+  baseSetMap.set('RED_1QB', red1qb);
+
+  const redSFBase = new Map<number, { value: number; position: Position }>();
+  for (const [id, { position }] of baseValues) {
+    redSFBase.set(id, { value: red1qb.get(id)!, position });
+  }
+  const redSF = computeSFValues(redSFBase);
+  baseSetMap.set('RED_SF', redSF);
+
+  // Step 4: Expand 4 base sets → 24 league types
+  console.log('\n[4/7] Expanding to 24 league types...');
+  const insertValue = db.prepare(`
+    INSERT OR REPLACE INTO asset_values (asset_id, league_type_id, value, updated_at)
+    VALUES (?, ?, ?, ?)
+  `);
+  const insertLog = db.prepare(`
+    INSERT INTO adjustment_log (asset_id, league_type_id, old_value, new_value, delta, reason, detail)
+    VALUES (?, ?, ?, ?, 0, 'seed', NULL)
+  `);
+  const insertHistory = db.prepare(`
+    INSERT OR REPLACE INTO value_history (asset_id, league_type_id, date, value)
+    VALUES (?, ?, ?, ?)
+  `);
+
+  let valueCount = 0;
+
+  const expandAll = db.transaction(() => {
+    for (const lt of leagueTypes) {
+      // Determine base set key
+      const baseKey = `${lt.format}_${lt.qb}`;
+      const baseVals = baseSetMap.get(baseKey);
+      if (!baseVals) continue;
+
+      for (const [assetId, baseValue] of baseVals) {
+        const { position } = baseValues.get(assetId) || { position: 'QB' as Position };
+
+        // Apply scoring multipliers
+        let value = baseValue;
+
+        // Reception scoring adjustment
+        if (lt.rec === 'HALF') {
+          const mult = SCORING_MULTIPLIERS.HALF[position as keyof typeof SCORING_MULTIPLIERS.HALF];
+          value *= mult;
+        } else if (lt.rec === 'ZERO') {
+          const mult = SCORING_MULTIPLIERS.ZERO[position as keyof typeof SCORING_MULTIPLIERS.ZERO];
+          value *= mult;
+        }
+        // PPR is the baseline, no adjustment
+
+        // TEP adjustment
+        if (lt.tep === 1 && position === 'TE') {
+          value *= SCORING_MULTIPLIERS.TEP.TE;
+        }
+
+        value = clampRound(value);
+
+        insertValue.run(assetId, lt.id, value, now);
+        insertLog.run(assetId, lt.id, value, value);
+        insertHistory.run(assetId, lt.id, today, value);
+        valueCount++;
+      }
+    }
+  });
+  expandAll();
+  console.log(`  Wrote ${valueCount} asset values across 24 league types`);
+
+  // Step 5: Seed picks for dynasty sets
+  console.log('\n[5/7] Seeding picks...');
+  const insertPick = db.prepare(`
+    INSERT OR IGNORE INTO picks (season, round, tier) VALUES (?, ?, ?)
+  `);
+  const insertPickAsset = db.prepare(`
+    INSERT INTO assets (kind, player_id, pick_id) VALUES ('pick', NULL, ?)
+  `);
+  const getPick = db.prepare('SELECT id FROM picks WHERE season = ? AND round = ? AND tier = ?');
+
+  const dynLeagueTypes = leagueTypes.filter(lt => lt.format === 'DYN');
+  let pickValueCount = 0;
+
+  const seedPicks = db.transaction(() => {
+    const tiers: PickTier[] = ['EARLY', 'MID', 'LATE'];
+
+    for (const season of PICK_YEARS) {
+      for (let round = 1; round <= 4; round++) {
+        for (const tier of tiers) {
+          insertPick.run(season, round, tier);
+          const pickRow = getPick.get(season, round, tier) as { id: number };
+
+          // Create asset if not exists
+          const existingAsset = db.prepare('SELECT id FROM assets WHERE pick_id = ?').get(pickRow.id);
+          if (!existingAsset) {
+            insertPickAsset.run(pickRow.id);
+          }
+
+          const assetRow = db.prepare('SELECT id FROM assets WHERE pick_id = ?').get(pickRow.id) as { id: number };
+          const assetId = assetRow.id;
+
+          // Compute base value
+          const yearOffset = season - PICK_YEARS[0] + 1; // 1, 2, or 3
+          const pickKey = `1_${round}_${tier}`;
+          const basePickValue = PICK_VALUES[pickKey] ?? 3;
+          const yearDecay = Math.pow(PICK_YEAR_DECAY, yearOffset - 1);
+
+          for (const lt of dynLeagueTypes) {
+            let value = basePickValue * yearDecay;
+
+            // SF boost for round 1
+            if (lt.qb === 'SF' && round === 1) {
+              value *= PICK_SF_FIRST_ROUND_MULTIPLIER;
+            }
+
+            value = clampRound(value);
+
+            insertValue.run(assetId, lt.id, value, now);
+            insertLog.run(assetId, lt.id, value, value);
+            insertHistory.run(assetId, lt.id, today, value);
+            pickValueCount++;
+          }
+        }
+      }
+    }
+  });
+  seedPicks();
+
+  const pickCount = (db.prepare('SELECT COUNT(*) as c FROM picks').get() as any).c;
+  console.log(`  Created ${pickCount} picks, ${pickValueCount} pick values across 12 DYN sets`);
+
+  // Step 6: Summary
+  const totalValues = (db.prepare('SELECT COUNT(*) as c FROM asset_values').get() as any).c;
+  const totalLogs = (db.prepare('SELECT COUNT(*) as c FROM adjustment_log').get() as any).c;
+  console.log(`\n[6/7] Summary:`);
+  console.log(`  Total asset_values: ${totalValues}`);
+  console.log(`  Total adjustment_log entries: ${totalLogs}`);
+  console.log(`  Total value_history snapshots: ${totalValues}`);
+
+  console.log('\n[7/7] Seed complete!');
+}

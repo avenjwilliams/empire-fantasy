@@ -1,0 +1,97 @@
+asset_id,kind,name,position,team,age,value
+2,player,Bijan Robinson,RB,ATL,23,90.2
+11,player,Ja'Marr Chase,WR,CIN,25,85.1
+9,player,Breece Hall,RB,NYJ,24,80.3
+13,player,CeeDee Lamb,WR,DAL,26,75.7
+5,player,Saquon Barkley,RB,PHI,28,71.4
+61,pick,2027 EARLY 1st,PICK,,,68.3
+17,player,Justin Jefferson,WR,MIN,26,67.4
+73,pick,2028 EARLY 1st,PICK,,,64.8
+14,player,Amon-Ra St. Brown,WR,DET,25,63.6
+85,pick,2029 EARLY 1st,PICK,,,61.6
+3,player,Josh Allen,QB,BUF,29,60.1
+10,player,Jahmyr Gibbs,RB,DET,23,60
+1,player,Patrick Mahomes,QB,KC,30,58.2
+62,pick,2027 MID 1st,PICK,,,57.8
+19,player,Marvin Harrison Jr,WR,ARI,23,56.5
+4,player,Lamar Jackson,QB,BAL,29,56.3
+74,pick,2028 MID 1st,PICK,,,54.9
+23,player,Malik Nabers,WR,NYG,22,53.4
+86,pick,2029 MID 1st,PICK,,,52.1
+7,player,Joe Burrow,QB,CIN,29,51.3
+12,player,De'Von Achane,RB,MIA,23,50.3
+6,player,Jalen Hurts,QB,PHI,27,49.8
+8,player,CJ Stroud,QB,HOU,24,48.3
+21,player,Garrett Wilson,WR,NYJ,25,47.4
+63,pick,2027 LATE 1st,PICK,,,47.3
+75,pick,2028 LATE 1st,PICK,,,44.9
+27,player,Drake London,WR,ATL,24,44.8
+87,pick,2029 LATE 1st,PICK,,,42.6
+39,player,Sam LaPorta,TE,DET,24,39.7
+49,player,Brock Bowers,TE,LV,22,37.5
+15,player,Caleb Williams,QB,CHI,23,37.3
+25,player,Anthony Richardson,QB,IND,23,32.3
+64,pick,2027 EARLY 2nd,PICK,,,32
+76,pick,2028 EARLY 2nd,PICK,,,30.4
+42,player,Drake Maye,QB,NE,23,30.1
+88,pick,2029 EARLY 2nd,PICK,,,28.9
+58,player,Aaron Rodgers,QB,,42,27.7
+65,pick,2027 MID 2nd,PICK,,,27
+26,player,Nico Collins,WR,HOU,26,26.5
+77,pick,2028 MID 2nd,PICK,,,25.7
+20,player,James Cook,RB,BUF,25,25
+89,pick,2029 MID 2nd,PICK,,,24.4
+31,player,Zay Flowers,WR,BAL,24,23.5
+66,pick,2027 LATE 2nd,PICK,,,23
+29,player,Chris Olave,WR,NO,25,22.3
+43,player,Trey McBride,TE,ARI,25,22.1
+78,pick,2028 LATE 2nd,PICK,,,21.8
+22,player,Kenneth Walker III,RB,SEA,25,21
+90,pick,2029 LATE 2nd,PICK,,,20.8
+34,player,Rashee Rice,WR,KC,25,18.7
+32,player,Kyren Williams,RB,LAR,25,17.6
+18,player,Jonathan Taylor,RB,IND,27,16.6
+33,player,DeVonta Smith,WR,PHI,26,15.7
+67,pick,2027 EARLY 3rd,PICK,,,15
+79,pick,2028 EARLY 3rd,PICK,,,14.3
+36,player,DK Metcalf,WR,SEA,28,14
+91,pick,2029 EARLY 3rd,PICK,,,13.5
+24,player,Josh Jacobs,RB,GB,27,13.2
+37,player,Brandon Aiyuk,WR,SF,27,12.5
+47,player,Dalton Kincaid,TE,BUF,25,12.3
+68,pick,2027 MID 3rd,PICK,,,12
+38,player,Jaylen Waddle,WR,MIA,26,11.7
+80,pick,2028 MID 3rd,PICK,,,11.4
+92,pick,2029 MID 3rd,PICK,,,10.8
+16,player,Tyreek Hill,WR,MIA,32,10.5
+69,pick,2027 LATE 3rd,PICK,,,10
+28,player,Isiah Pacheco,RB,KC,26,9.9
+81,pick,2028 LATE 3rd,PICK,,,9.5
+40,player,Tank Dell,WR,HOU,25,9.3
+41,player,Travis Kelce,TE,KC,36,9.2
+93,pick,2029 LATE 3rd,PICK,,,9
+51,player,Kyle Pitts,TE,ATL,25,8.6
+30,player,Derrick Henry,RB,BAL,32,7.3
+35,player,Travis Etienne,RB,JAX,27,7
+45,player,Rachaad White,RB,TB,26,6.5
+70,pick,2027 EARLY 4th,PICK,,,6
+48,player,David Montgomery,RB,DET,28,5.8
+46,player,Mark Andrews,TE,BAL,30,5.7
+82,pick,2028 EARLY 4th,PICK,,,5.7
+50,player,Davante Adams,WR,NYJ,33,5.5
+44,player,George Kittle,TE,SF,32,5.4
+94,pick,2029 EARLY 4th,PICK,,,5.4
+56,player,Evan Engram,TE,JAX,30,5.1
+71,pick,2027 MID 4th,PICK,,,5
+83,pick,2028 MID 4th,PICK,,,4.8
+95,pick,2029 MID 4th,PICK,,,4.5
+52,player,Jonathon Brooks,RB,CAR,23,4.4
+53,player,Zack Moss,RB,CIN,27,4.1
+72,pick,2027 LATE 4th,PICK,,,4
+55,player,Rico Dowdle,RB,DAL,27,3.9
+84,pick,2028 LATE 4th,PICK,,,3.8
+54,player,Najee Harris,RB,PIT,28,3.6
+96,pick,2029 LATE 4th,PICK,,,3.6
+57,player,Stefon Diggs,WR,HOU,32,3.4
+60,player,Pat Freiermuth,TE,,27,3.2
+59,player,Kareem Hunt,RB,,31,3.1
