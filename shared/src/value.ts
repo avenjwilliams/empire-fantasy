@@ -1,4 +1,8 @@
-import type { TradeAsset, TradeSide, TradeResult, Verdict } from './types.js';
+import type { TradeAsset, TradeSide, TradeResult, Verdict, Position, RecScoring, TEPSetting, Format } from './types.js';
+import {
+  SCORING, REC_BONUS, TEP_BONUS,
+  STAT_SENSITIVITY, STAT_CAP, AGE_NUDGE,
+} from './constants.js';
 
 // =====================================================
 // Constants
@@ -204,4 +208,117 @@ export function computeVoteDeltas(
     tradeDelta: -d_kt + d_tc,      // loses to keep, beats cut
     cutDelta:   -d_kc - d_tc,      // loses both
   };
+}
+
+// =====================================================
+// Stat Ingestion Math
+// =====================================================
+
+export interface WeekStats {
+  pass_yd?: number;
+  pass_td?: number;
+  pass_int?: number;
+  rush_yd?: number;
+  rush_td?: number;
+  rec?: number;
+  rec_yd?: number;
+  rec_td?: number;
+  fum_lost?: number;
+}
+
+/**
+ * Compute fantasy points for a player's week stats under a given scoring config.
+ * QB axis (1QB/SF) does not change points — only rec/tep matter.
+ */
+export function computeFantasyPoints(
+  stats: WeekStats,
+  rec: RecScoring,
+  tep: TEPSetting,
+  position: Position,
+): number {
+  let pts = 0;
+  pts += (stats.pass_yd ?? 0) * SCORING.PASS_YD;
+  pts += (stats.pass_td ?? 0) * SCORING.PASS_TD;
+  pts += (stats.pass_int ?? 0) * SCORING.PASS_INT;
+  pts += (stats.rush_yd ?? 0) * SCORING.RUSH_YD;
+  pts += (stats.rush_td ?? 0) * SCORING.RUSH_TD;
+  pts += (stats.rec_yd ?? 0) * SCORING.REC_YD;
+  pts += (stats.rec_td ?? 0) * SCORING.REC_TD;
+  pts += (stats.fum_lost ?? 0) * SCORING.FUM_LOST;
+
+  const receptions = stats.rec ?? 0;
+  pts += receptions * (REC_BONUS[rec] ?? 0);
+
+  if (tep === 'TEP' && position === 'TE') {
+    pts += receptions * TEP_BONUS;
+  }
+
+  return Math.round(pts * 100) / 100;
+}
+
+/**
+ * Compute the capped stat adjustment delta from surprise and stddev.
+ */
+export function computeStatDelta(
+  surprise: number,
+  stddev: number,
+  format: Format,
+): number {
+  if (stddev <= 0) return 0;
+  const z = surprise / stddev;
+  const sensitivity = STAT_SENSITIVITY[format];
+  const cap = STAT_CAP[format];
+  const raw = z * sensitivity;
+  return Math.max(-cap, Math.min(cap, raw));
+}
+
+/**
+ * Compute the weekly dynasty age nudge for a player.
+ * Returns 0 for RED formats or players below the age threshold.
+ */
+export function computeAgeNudge(position: Position, age: number | null): number {
+  if (age === null) return 0;
+  const rule = AGE_NUDGE[position];
+  if (!rule) return 0;
+  if (age >= rule.minAge) return rule.nudge;
+  return 0;
+}
+
+export interface PositionWeekEntry {
+  assetId: number;
+  value: number;
+  actualPoints: number;
+}
+
+/**
+ * Quantile-map expectation model: rank players by value, rank scores,
+ * and map by position to compute expected points per player.
+ */
+export function computeExpectations(
+  players: PositionWeekEntry[],
+): { assetId: number; expected: number; surprise: number }[] {
+  if (players.length === 0) return [];
+
+  // Sort by value descending — rank 0 = highest valued
+  const byValue = [...players].sort((a, b) => b.value - a.value);
+
+  // Sort scores descending
+  const sortedScores = players.map(p => p.actualPoints).sort((a, b) => b - a);
+
+  return byValue.map((player, rank) => ({
+    assetId: player.assetId,
+    expected: sortedScores[rank],
+    surprise: player.actualPoints - sortedScores[rank],
+  }));
+}
+
+/**
+ * Population standard deviation of an array of numbers.
+ * Returns 1 if fewer than 2 values to prevent division by zero.
+ */
+export function populationStddev(values: number[]): number {
+  if (values.length < 2) return 1;
+  const mean = values.reduce((a, b) => a + b, 0) / values.length;
+  const variance = values.reduce((sum, v) => sum + (v - mean) ** 2, 0) / values.length;
+  return Math.sqrt(variance) || 1; // fallback to 1 if all values identical
 }

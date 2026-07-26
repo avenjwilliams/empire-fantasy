@@ -9,6 +9,11 @@ import {
   VOTE_CONSTANTS,
   computePairwiseDelta,
   computeVoteDeltas,
+  computeFantasyPoints,
+  computeStatDelta,
+  computeAgeNudge,
+  computeExpectations,
+  populationStddev,
 } from './value.js';
 
 describe('value.ts', () => {
@@ -342,6 +347,221 @@ describe('value.ts', () => {
       // keep's delta should be smaller than with full K
       const full = computeVoteDeltas(60, 55, 50);
       expect(Math.abs(keepDelta)).toBeLessThan(Math.abs(full.keepDelta));
+    });
+  });
+
+  // =====================================================
+  // Stat Ingestion Math
+  // =====================================================
+
+  describe('computeFantasyPoints', () => {
+    const monsterQB = {
+      pass_yd: 412, pass_td: 4, pass_int: 0,
+      rush_yd: 38, rush_td: 1, rec: 0, rec_yd: 0, rec_td: 0, fum_lost: 0,
+    };
+
+    it('computes QB points correctly (PPR STD)', () => {
+      // 412/25=16.48, 4*4=16, 38/10=3.8, 1*6=6 → 42.28
+      const pts = computeFantasyPoints(monsterQB, 'PPR', 'STD', 'QB');
+      expect(pts).toBeCloseTo(42.28, 1);
+    });
+
+    it('QB points are identical across PPR/HALF/ZERO (no receptions)', () => {
+      const ppr = computeFantasyPoints(monsterQB, 'PPR', 'STD', 'QB');
+      const half = computeFantasyPoints(monsterQB, 'HALF', 'STD', 'QB');
+      const zero = computeFantasyPoints(monsterQB, 'ZERO', 'STD', 'QB');
+      expect(ppr).toBe(half);
+      expect(half).toBe(zero);
+    });
+
+    it('computes RB PPR points with receptions', () => {
+      const rb = { pass_yd: 0, pass_td: 0, pass_int: 0,
+        rush_yd: 112, rush_td: 2, rec: 3, rec_yd: 28, rec_td: 0, fum_lost: 0 };
+      // 112/10=11.2, 2*6=12, 3*1=3, 28/10=2.8 → 29.0
+      const pts = computeFantasyPoints(rb, 'PPR', 'STD', 'RB');
+      expect(pts).toBeCloseTo(29.0, 1);
+    });
+
+    it('HALF scoring gives 0.5 per reception', () => {
+      const rb = { rec: 6, rec_yd: 55, rec_td: 1, rush_yd: 68, rush_td: 0,
+        pass_yd: 0, pass_td: 0, pass_int: 0, fum_lost: 0 };
+      const ppr = computeFantasyPoints(rb, 'PPR', 'STD', 'RB');
+      const half = computeFantasyPoints(rb, 'HALF', 'STD', 'RB');
+      expect(ppr - half).toBeCloseTo(3.0, 5); // 6 rec * 0.5 difference
+    });
+
+    it('ZERO scoring gives no reception bonus', () => {
+      const rb = { rec: 6, rec_yd: 55, rec_td: 1, rush_yd: 68, rush_td: 0,
+        pass_yd: 0, pass_td: 0, pass_int: 0, fum_lost: 0 };
+      const ppr = computeFantasyPoints(rb, 'PPR', 'STD', 'RB');
+      const zero = computeFantasyPoints(rb, 'ZERO', 'STD', 'RB');
+      expect(ppr - zero).toBeCloseTo(6.0, 5); // 6 rec * 1.0 difference
+    });
+
+    it('TEP gives TEs extra 0.5 per reception', () => {
+      const te = { rec: 9, rec_yd: 112, rec_td: 1,
+        rush_yd: 0, rush_td: 0, pass_yd: 0, pass_td: 0, pass_int: 0, fum_lost: 0 };
+      const std = computeFantasyPoints(te, 'PPR', 'STD', 'TE');
+      const tep = computeFantasyPoints(te, 'PPR', 'TEP', 'TE');
+      expect(tep - std).toBeCloseTo(4.5, 5); // 9 rec * 0.5
+    });
+
+    it('TEP does NOT give extra bonus to non-TEs', () => {
+      const wr = { rec: 7, rec_yd: 132, rec_td: 2,
+        rush_yd: 0, rush_td: 0, pass_yd: 0, pass_td: 0, pass_int: 0, fum_lost: 0 };
+      const std = computeFantasyPoints(wr, 'PPR', 'STD', 'WR');
+      const tep = computeFantasyPoints(wr, 'PPR', 'TEP', 'WR');
+      expect(tep).toBe(std);
+    });
+
+    it('negative scoring: INTs and fumbles subtract', () => {
+      const badQB = { pass_yd: 178, pass_td: 1, pass_int: 2,
+        rush_yd: 55, rush_td: 0, rec: 0, rec_yd: 0, rec_td: 0, fum_lost: 1 };
+      // 178/25=7.12, 1*4=4, 2*-2=-4, 55/10=5.5, 1*-2=-2 → 10.62
+      const pts = computeFantasyPoints(badQB, 'PPR', 'STD', 'QB');
+      expect(pts).toBeCloseTo(10.62, 1);
+    });
+
+    it('handles missing stat fields gracefully', () => {
+      const pts = computeFantasyPoints({}, 'PPR', 'STD', 'RB');
+      expect(pts).toBe(0);
+    });
+  });
+
+  describe('computeStatDelta', () => {
+    it('positive surprise in RED format', () => {
+      // z=1, raw = 1*0.35 = 0.35
+      const delta = computeStatDelta(5, 5, 'RED');
+      expect(delta).toBeCloseTo(0.35, 5);
+    });
+
+    it('positive surprise in DYN format', () => {
+      // z=1, raw = 1*0.15 = 0.15
+      const delta = computeStatDelta(5, 5, 'DYN');
+      expect(delta).toBeCloseTo(0.15, 5);
+    });
+
+    it('caps at +0.8 for RED', () => {
+      const delta = computeStatDelta(100, 5, 'RED');
+      expect(delta).toBe(0.8);
+    });
+
+    it('caps at -0.8 for RED', () => {
+      const delta = computeStatDelta(-100, 5, 'RED');
+      expect(delta).toBe(-0.8);
+    });
+
+    it('caps at ±0.4 for DYN', () => {
+      expect(computeStatDelta(100, 5, 'DYN')).toBe(0.4);
+      expect(computeStatDelta(-100, 5, 'DYN')).toBe(-0.4);
+    });
+
+    it('returns 0 for zero surprise', () => {
+      expect(computeStatDelta(0, 5, 'RED')).toBe(0);
+    });
+
+    it('returns 0 for zero stddev', () => {
+      expect(computeStatDelta(10, 0, 'RED')).toBe(0);
+    });
+
+    it('season sanity: 1 stddev over for 17 weeks in RED ≈ 6 pts', () => {
+      // z=1 each week → delta = 0.35 per week → 17 * 0.35 = 5.95
+      const perWeek = computeStatDelta(5, 5, 'RED'); // z=1
+      expect(perWeek * 17).toBeCloseTo(5.95, 0);
+    });
+  });
+
+  describe('computeAgeNudge', () => {
+    it('RB age 27+ gets -0.05', () => {
+      expect(computeAgeNudge('RB', 27)).toBe(-0.05);
+      expect(computeAgeNudge('RB', 30)).toBe(-0.05);
+    });
+
+    it('RB age 26 gets 0', () => {
+      expect(computeAgeNudge('RB', 26)).toBe(0);
+    });
+
+    it('WR age 30+ gets -0.03', () => {
+      expect(computeAgeNudge('WR', 30)).toBe(-0.03);
+      expect(computeAgeNudge('WR', 33)).toBe(-0.03);
+    });
+
+    it('TE age 30+ gets -0.03', () => {
+      expect(computeAgeNudge('TE', 30)).toBe(-0.03);
+      expect(computeAgeNudge('TE', 32)).toBe(-0.03);
+    });
+
+    it('QB age 36+ gets -0.03', () => {
+      expect(computeAgeNudge('QB', 36)).toBe(-0.03);
+    });
+
+    it('QB age 35 gets 0', () => {
+      expect(computeAgeNudge('QB', 35)).toBe(0);
+    });
+
+    it('null age returns 0', () => {
+      expect(computeAgeNudge('RB', null)).toBe(0);
+    });
+  });
+
+  describe('computeExpectations', () => {
+    it('maps by quantile: highest value expects highest score', () => {
+      const players = [
+        { assetId: 1, value: 90, actualPoints: 10 },
+        { assetId: 2, value: 70, actualPoints: 30 },
+        { assetId: 3, value: 50, actualPoints: 20 },
+      ];
+      const result = computeExpectations(players);
+
+      // Value rank: 1(90), 2(70), 3(50)
+      // Sorted scores: 30, 20, 10
+      // Expected: assetId=1 expects 30, assetId=2 expects 20, assetId=3 expects 10
+      const byId = (id: number) => result.find(r => r.assetId === id)!;
+
+      expect(byId(1).expected).toBe(30);
+      expect(byId(1).surprise).toBe(10 - 30); // -20
+
+      expect(byId(2).expected).toBe(20);
+      expect(byId(2).surprise).toBe(30 - 20); // +10
+
+      expect(byId(3).expected).toBe(10);
+      expect(byId(3).surprise).toBe(20 - 10); // +10
+    });
+
+    it('player who scores as expected has surprise 0', () => {
+      // All score in exact value order
+      const players = [
+        { assetId: 1, value: 90, actualPoints: 30 },
+        { assetId: 2, value: 70, actualPoints: 20 },
+        { assetId: 3, value: 50, actualPoints: 10 },
+      ];
+      const result = computeExpectations(players);
+      for (const r of result) {
+        expect(r.surprise).toBe(0);
+      }
+    });
+
+    it('returns empty for empty input', () => {
+      expect(computeExpectations([])).toEqual([]);
+    });
+  });
+
+  describe('populationStddev', () => {
+    it('computes correctly for known values', () => {
+      // [2, 4, 4, 4, 5, 5, 7, 9] → mean=5, var=4, stddev=2
+      expect(populationStddev([2, 4, 4, 4, 5, 5, 7, 9])).toBe(2);
+    });
+
+    it('returns 1 for single value (prevent division by zero)', () => {
+      expect(populationStddev([5])).toBe(1);
+    });
+
+    it('returns 1 for empty array', () => {
+      expect(populationStddev([])).toBe(1);
+    });
+
+    it('returns 1 for identical values', () => {
+      expect(populationStddev([10, 10, 10])).toBe(1);
     });
   });
 });

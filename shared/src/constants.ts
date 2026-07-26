@@ -32,3 +32,52 @@ export const PICK_YEARS = [
   CURRENT_YEAR + 2,
   CURRENT_YEAR + 3,
 ];
+
+// =====================================================
+// Stat Ingestion Constants
+// =====================================================
+
+/** Fantasy points scoring weights (base scoring) */
+export const SCORING = {
+  PASS_YD: 1 / 25,   // 0.04 per yard
+  PASS_TD: 4,
+  PASS_INT: -2,
+  RUSH_YD: 1 / 10,   // 0.1 per yard
+  RUSH_TD: 6,
+  REC_YD: 1 / 10,    // 0.1 per yard
+  REC_TD: 6,
+  FUM_LOST: -2,
+} as const;
+
+/** Per-reception bonus by scoring type */
+export const REC_BONUS: Record<string, number> = {
+  PPR: 1.0,
+  HALF: 0.5,
+  ZERO: 0,
+};
+
+/** Additional per-reception bonus for TEs in TEP leagues */
+export const TEP_BONUS = 0.5;
+
+/** Sensitivity (z-score multiplier) by format */
+export const STAT_SENSITIVITY: Record<string, number> = {
+  RED: 0.35,
+  DYN: 0.15,
+};
+
+/** Max absolute delta per stat adjustment by format */
+export const STAT_CAP: Record<string, number> = {
+  RED: 0.8,
+  DYN: 0.4,
+};
+
+/** Age nudges for dynasty sets (per week, DYN only) */
+export const AGE_NUDGE: Record<string, { minAge: number; nudge: number }> = {
+  RB: { minAge: 27, nudge: -0.05 },
+  WR: { minAge: 30, nudge: -0.03 },
+  TE: { minAge: 30, nudge: -0.03 },
+  QB: { minAge: 36, nudge: -0.03 },
+};
+
+/** Minimum value to include in the expectation model */
+export const MIN_VALUE_FOR_EXPECTATION = 5;

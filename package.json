@@ -9,7 +9,8 @@
     "seed": "tsx scripts/seed.ts",
     "stats:week": "tsx scripts/ingest-week.ts",
     "rankings:export": "tsx scripts/export-rankings.ts",
-    "rankings:import": "tsx scripts/import-rankings.ts"
+    "rankings:import": "tsx scripts/import-rankings.ts",
+    "snapshot": "tsx scripts/snapshot-history.ts"
   },
   "devDependencies": {
     "@types/node": "^20.14.0",
