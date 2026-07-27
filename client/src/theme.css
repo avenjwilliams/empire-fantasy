@@ -165,7 +165,7 @@ a:hover { text-decoration: underline; }
   padding: 0.5rem 0.75rem;
   border-bottom: 2px solid var(--border);
   position: sticky;
-  top: 52px;
+  top: 0;
   background: var(--bg);
   z-index: 10;
 }
@@ -590,6 +590,92 @@ a:hover { text-decoration: underline; }
   font-size: 0.85rem;
 }
 
+/* ---- Math Panel ---- */
+.math-toggle {
+  display: block;
+  width: 100%;
+  margin-top: 0.75rem;
+  padding: 0.4rem;
+  background: transparent;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  color: var(--ink-muted);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+.math-toggle:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.math-panel {
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border);
+}
+
+.math-panel__side {
+  margin-bottom: 1rem;
+}
+
+.math-panel__heading {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.4rem;
+}
+
+.math-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.75rem;
+}
+
+.math-table th {
+  text-align: left;
+  color: var(--ink-muted);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 0.65rem;
+  padding: 0.3rem 0.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.math-table td {
+  padding: 0.25rem 0.5rem;
+  border-bottom: 1px solid rgba(42,53,69,0.5);
+}
+
+.math-num {
+  text-align: right;
+  font-family: var(--font-mono);
+  font-weight: 600;
+}
+
+.math-panel__summary {
+  margin-top: 0.5rem;
+  padding: 0.5rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 0.75rem;
+  color: var(--ink-muted);
+}
+
+.math-panel__summary p {
+  margin-bottom: 0.25rem;
+}
+
+.math-panel__summary p:last-child {
+  margin-bottom: 0;
+}
+
 @media (max-width: 768px) {
   .calc-grid { grid-template-columns: 1fr; }
 }
@@ -628,6 +714,8 @@ a:hover { text-decoration: underline; }
 /* ---- Table Scroll Wrapper ---- */
 .table-scroll {
   overflow-x: auto;
+  overflow-y: auto;
+  max-height: calc(100vh - 200px);
   -webkit-overflow-scrolling: touch;
 }
 
@@ -640,6 +728,59 @@ a:hover { text-decoration: underline; }
 
 /* ---- KTC ---- */
 .ktc-intro { margin-bottom: 1rem; }
+
+.ktc-popup-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+  padding: 1rem;
+}
+
+.ktc-popup {
+  background: var(--bg);
+  border: 2px solid var(--accent);
+  border-radius: var(--radius);
+  padding: 1.5rem;
+  max-width: 640px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  position: relative;
+}
+
+.ktc-popup__close {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  background: none;
+  border: none;
+  color: var(--ink-muted);
+  font-size: 1.1rem;
+  cursor: pointer;
+  padding: 0.25rem;
+  line-height: 1;
+}
+.ktc-popup__close:hover { color: var(--ink); }
+
+.ktc-popup__title {
+  font-family: var(--font-mono);
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom: 0.25rem;
+}
+
+.ktc-popup__subtitle {
+  color: var(--ink-muted);
+  font-size: 0.85rem;
+  margin-bottom: 1rem;
+}
 
 .ktc-league-badge {
   display: inline-block;

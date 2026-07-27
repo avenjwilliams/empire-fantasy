@@ -55,11 +55,14 @@ Map lean to a **display scale from −100 (favors Team 1) to +100 (favors Team 2
   "team2": { ... },
   "scale": -23,
   "verdict": "Clear win — Team 1",
-  "differencePct": 7.7
+  "differencePct": 7.7,
+  "adviceGap": 54
 }
 ```
 
-Also return `adviceGap`: the linear value a hypothetical added asset would need to roughly even the trade (find v where adding trueValue(v)·nextWeight closes |diff|) — powers a "to make it fair, add a ~54-value player" hint.
+`adviceGap`: the linear value a hypothetical added asset would need to roughly even the trade (find v where adding trueValue(v)·nextWeight closes |diff|) — powers a "to make it fair, add a ~54-value player" hint. `null` when trade is fair.
+
+The client's "Show the math" panel renders per-asset breakdowns from the `assets` array: `value` (linear 1–100), `trueValue` (nonlinear trade value), `weight` (slot depth discount), and `trueValue × weight` (weighted contribution).
 
 ## Constants
 

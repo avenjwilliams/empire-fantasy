@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useLeagueType } from '../context/LeagueTypeContext.js';
 import AssetSearch from '../components/AssetSearch.js';
 import TradeScale from '../components/TradeScale.js';
+import { trueValue, getWeight } from '@empire-fantasy/shared';
 
 interface SelectedAsset {
   asset_id: number;
@@ -27,6 +28,7 @@ export default function Calculator() {
   const [team2, setTeam2] = useState<SelectedAsset[]>([]);
   const [result, setResult] = useState<TradeResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [showMath, setShowMath] = useState(false);
 
   const allIds = useMemo(() => {
     const set = new Set<number>();
@@ -163,6 +165,85 @@ export default function Calculator() {
               </span>
             )}
           </div>
+
+          <button
+            className="math-toggle"
+            onClick={() => setShowMath(prev => !prev)}
+          >
+            {showMath ? '− Hide the math' : '+ Show the math'}
+          </button>
+
+          {showMath && (
+            <div className="math-panel">
+              <div className="math-panel__side">
+                <h3 className="math-panel__heading">Team 1 — {result.team1.sideValue.toLocaleString()}</h3>
+                <table className="math-table">
+                  <thead>
+                    <tr>
+                      <th>Player</th>
+                      <th>Value</th>
+                      <th>True Value</th>
+                      <th>Weight</th>
+                      <th>Weighted</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {result.team1.assets.map((a, i) => {
+                      const weighted = Math.round(a.trueValue * a.weight);
+                      return (
+                        <tr key={a.id}>
+                          <td>{a.name}</td>
+                          <td className="math-num">{a.value.toFixed(1)}</td>
+                          <td className="math-num">{a.trueValue.toLocaleString()}</td>
+                          <td className="math-num">{a.weight.toFixed(2)}</td>
+                          <td className="math-num">{weighted.toLocaleString()}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="math-panel__side">
+                <h3 className="math-panel__heading">Team 2 — {result.team2.sideValue.toLocaleString()}</h3>
+                <table className="math-table">
+                  <thead>
+                    <tr>
+                      <th>Player</th>
+                      <th>Value</th>
+                      <th>True Value</th>
+                      <th>Weight</th>
+                      <th>Weighted</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {result.team2.assets.map((a, i) => {
+                      const weighted = Math.round(a.trueValue * a.weight);
+                      return (
+                        <tr key={a.id}>
+                          <td>{a.name}</td>
+                          <td className="math-num">{a.value.toFixed(1)}</td>
+                          <td className="math-num">{a.trueValue.toLocaleString()}</td>
+                          <td className="math-num">{a.weight.toFixed(2)}</td>
+                          <td className="math-num">{weighted.toLocaleString()}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="math-panel__summary">
+                <p>
+                  <strong>Scale:</strong> {result.scale} ({result.verdict})
+                </p>
+                <p>
+                  <strong>Formula:</strong> value^2.6 / 100^2.6 × 10000, then depth-weighted
+                  (1.0, 0.9, 0.8, 0.65, 0.5, 0.4, 0.3…)
+                </p>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

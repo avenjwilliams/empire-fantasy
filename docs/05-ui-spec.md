@@ -21,6 +21,7 @@ Persistent top bar: `EMPIRE FANTASY` wordmark left; tabs: **Calculator · Rankin
 
 - Two columns: TEAM 1 / TEAM 2. Each has an asset search (typeahead: name, shows pos·team·age·value) and a stacked list of added assets with per-asset value and remove ✕. Picks appear in search only for DYN league types.
 - Below: horizontal **trade scale** — a meter from TEAM 1 ←→ TEAM 2 with a needle at `scale` (−100..+100), verdict text ("FAIR TRADE", "CLEAR WIN — TEAM 1"), each side's total, and the "add a ~X-value player to even it" hint.
+- Expandable **"Show the math"** panel: per-asset breakdown (linear value → curved trueValue → slot weight → weighted contribution), side totals, and formula explanation. Toggled via dashed-border button below the verdict.
 - Evaluation auto-runs on every change (debounced); no submit button.
 
 ### 2. Rankings (`/rankings`)
@@ -32,8 +33,8 @@ Persistent top bar: `EMPIRE FANTASY` wordmark left; tabs: **Calculator · Rankin
 
 ### 3. Keep / Trade / Cut (`/ktc`)
 
-- First visit (no session cookie): this page is the landing experience — brief one-liner "Your picks tune the market," then the prompt.
-- Prompt UI: league type shown as a small badge; three player cards (name, pos, team, age — **no values shown**). User drags or taps to assign KEEP / TRADE / CUT (tap-cycle is fine on mobile). Submit → subtle confirmation ("market updated"), auto-load next prompt. Skip button available.
+- **First-visit popup**: on first visit (no `ef_ktc_seen` in localStorage), a modal overlay appears over whatever page the user landed on. Same KTC card UI as the full page. Dismissible (✕ or Skip); after voting or skipping, sets localStorage flag and never auto-shows again. The KTC tab remains for voluntary additional votes.
+- Prompt UI: league type shown as a small badge; three player cards (name, pos, team, age — **no values shown**). User taps to assign KEEP / TRADE / CUT (tap-cycle on mobile). Submit → subtle confirmation ("market updated"), auto-dismisses popup or loads next prompt. Skip button available.
 - Daily cap reached → friendly "market's closed for you today" message.
 
 ### 4. Log (`/log`)

@@ -1,5 +1,6 @@
 import { Routes, Route, NavLink } from 'react-router-dom';
 import LeagueTypeSelector from './components/LeagueTypeSelector.js';
+import KtcPopup from './components/KtcPopup.js';
 import Rankings from './pages/Rankings.js';
 import PlayerDetail from './pages/PlayerDetail.js';
 import Log from './pages/Log.js';
@@ -9,6 +10,7 @@ import KeepTradeCut from './pages/KeepTradeCut.js';
 export default function App() {
   return (
     <>
+      <KtcPopup />
       <header className="topbar">
         <div className="topbar__brand">Empire Fantasy</div>
         <nav className="topbar__nav">
