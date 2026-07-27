@@ -36,7 +36,6 @@ interface SeedConfig {
 }
 
 const VALID_POSITIONS: Position[] = ['QB', 'RB', 'WR', 'TE'];
-const MAX_PLAYERS = 800;
 
 // ------ Rank → Value Curve ------
 
@@ -92,7 +91,7 @@ function parseSleeperPlayers(raw: Record<string, any>): SleeperPlayer[] {
   }
 
   players.sort((a, b) => a.search_rank - b.search_rank);
-  return players.slice(0, MAX_PLAYERS);
+  return players;
 }
 
 function loadSleeperPlayers(config: SeedConfig): SleeperPlayer[] {
@@ -110,6 +109,20 @@ function loadSleeperPlayers(config: SeedConfig): SleeperPlayer[] {
 }
 
 // ------ Seed Rankings Loading ------
+
+const CSV_SETS = ['DYN_1QB', 'RED_1QB', 'DYN_SF', 'RED_SF'];
+
+/** Load all seed CSVs and return a set of canonical player names. */
+function loadCsvNameSet(config: SeedConfig): Set<string> {
+  const names = new Set<string>();
+  for (const setCode of CSV_SETS) {
+    const rows = loadSeedRankings(config, setCode);
+    for (const row of rows) {
+      names.add(normalizeName(row.name));
+    }
+  }
+  return names;
+}
 
 function loadSeedRankings(config: SeedConfig, setCode: string): SeedRankingRow[] {
   // Try manual CSVs first, then fixture (both sets share the fixture in test mode)
@@ -171,23 +184,25 @@ export async function seed(db: Database.Database, config: SeedConfig): Promise<v
   console.log('=== Empire Fantasy Seed ===');
   console.log(`Mode: ${config.fixturesMode ? 'FIXTURES' : 'LIVE'}`);
 
-  // Step 1: Load and insert players
+  // Step 1: Load players from cache, filtered to only CSV names
   console.log('\n[1/7] Loading players...');
-  const sleeperPlayers = loadSleeperPlayers(config);
-  console.log(`  Found ${sleeperPlayers.length} eligible players`);
+  const csvNameSet = loadCsvNameSet(config);
+  console.log(`  CSV universe: ${csvNameSet.size} unique player names`);
 
-  // Remove players in DB but not in current cache (retired, removed from cache, etc.)
-  const cacheIds = new Set(sleeperPlayers.map(p => String(p.player_id)));
-  const orphanedPlayers = db.prepare(`
-    SELECT p.id, p.name FROM players p
-    WHERE p.sleeper_id NOT IN (${Array(cacheIds.size).fill('?').join(',')})
-  `).all(...cacheIds) as { id: number; name: string }[];
+  const sleeperPlayers = loadSleeperPlayers(config).filter(p =>
+    csvNameSet.has(normalizeName(p.full_name))
+  );
+  console.log(`  Matched ${sleeperPlayers.length} cache players to CSV names`);
 
-  if (orphanedPlayers.length > 0) {
-    console.log(`  Cleaning ${orphanedPlayers.length} players not in cache...`);
+  // Remove players in DB but not in CSV universe
+  const allDbPlayers = db.prepare('SELECT id, name FROM players').all() as { id: number; name: string }[];
+  const trueOrphans = allDbPlayers.filter(p => !csvNameSet.has(normalizeName(p.name)));
+
+  if (trueOrphans.length > 0) {
+    console.log(`  Cleaning ${trueOrphans.length} players not in any CSV...`);
     db.pragma('foreign_keys = OFF');
     const cleanOrphans = db.transaction(() => {
-      for (const p of orphanedPlayers) {
+      for (const p of trueOrphans) {
         db.prepare('DELETE FROM weekly_stats WHERE player_id = ?').run(p.id);
         const asset = db.prepare('SELECT id FROM assets WHERE player_id = ?').get(p.id) as { id: number } | undefined;
         if (asset) {
@@ -242,13 +257,8 @@ export async function seed(db: Database.Database, config: SeedConfig): Promise<v
     playersByName.set(key, arr);
   }
 
-  const allAssets = db.prepare(`
-    SELECT a.id as asset_id, p.id as player_id, p.position, p.team
-    FROM assets a JOIN players p ON a.player_id = p.id
-  `).all() as { asset_id: number; player_id: number; position: string; team: string | null }[];
-
   // Match seed rankings to DB players and assign values via rankToValue curve.
-  // Unranked players get tail-end values. Used for both dynasty and redraft bases.
+  // Only CSV-matched players get values.
   function matchAndValueRankings(
     seedRankings: SeedRankingRow[],
     label: string,
@@ -283,28 +293,7 @@ export async function seed(db: Database.Database, config: SeedConfig): Promise<v
     }
     console.log(`  [${label}] Matched ${rankedPlayers.length} of ${seedRankings.length} ranked entries`);
 
-    // Assign tail-end values to unranked players
-    // Start AFTER all CSV entries so unranked players (including retired) are below every ADP-ranked player
-    const rankedIds = new Set(rankedPlayers.map(r => r.playerId));
-    const unrankedAssets = allAssets
-      .filter(a => !rankedIds.has(a.player_id))
-      .sort((a, b) => {
-        if (a.team && !b.team) return -1;
-        if (!a.team && b.team) return 1;
-        return 0;
-      });
-    let nextRank = seedRankings.length + 1;
-    for (const a of unrankedAssets) {
-      const value = rankToValue(nextRank, allAssets.length);
-      rankedPlayers.push({
-        playerId: a.player_id,
-        assetId: a.asset_id,
-        position: a.position as Position,
-        rank: nextRank,
-        value,
-      });
-      nextRank++;
-    }
+    // No tail-end: only CSV-matched players get values
 
     const baseValues = new Map<number, { value: number; position: Position }>();
     for (const rp of rankedPlayers) {
