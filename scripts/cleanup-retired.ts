@@ -109,14 +109,20 @@ console.log(`\nDeleting ${assetIds.length} assets and related data...`);
 const assetPlaceholders = assetIds.map(() => '?').join(',');
 
 const cleanup = db.transaction(() => {
-  if (assetIds.length > 0) {
-    db.prepare(`DELETE FROM adjustment_log WHERE asset_id IN (${assetPlaceholders})`).run(...assetIds);
-    db.prepare(`DELETE FROM asset_values WHERE asset_id IN (${assetPlaceholders})`).run(...assetIds);
-    db.prepare(`DELETE FROM value_history WHERE asset_id IN (${assetPlaceholders})`).run(...assetIds);
+  // Disable FK checks for cleanup to avoid cascading constraint issues
+  db.pragma('foreign_keys = OFF');
+  try {
+    if (assetIds.length > 0) {
+      db.prepare(`DELETE FROM adjustment_log WHERE asset_id IN (${assetPlaceholders})`).run(...assetIds);
+      db.prepare(`DELETE FROM asset_values WHERE asset_id IN (${assetPlaceholders})`).run(...assetIds);
+      db.prepare(`DELETE FROM value_history WHERE asset_id IN (${assetPlaceholders})`).run(...assetIds);
+    }
+    db.prepare(`DELETE FROM weekly_stats WHERE player_id IN (${placeholders})`).run(...playerIds);
+    db.prepare(`DELETE FROM assets WHERE player_id IN (${placeholders})`).run(...playerIds);
+    db.prepare(`DELETE FROM players WHERE id IN (${placeholders})`).run(...playerIds);
+  } finally {
+    db.pragma('foreign_keys = ON');
   }
-  db.prepare(`DELETE FROM weekly_stats WHERE player_id IN (${placeholders})`).run(...playerIds);
-  db.prepare(`DELETE FROM assets WHERE player_id IN (${placeholders})`).run(...playerIds);
-  db.prepare(`DELETE FROM players WHERE id IN (${placeholders})`).run(...playerIds);
 });
 
 cleanup();

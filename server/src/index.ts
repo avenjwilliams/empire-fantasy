@@ -100,7 +100,6 @@ async function cleanupRetiredPlayers(db: ReturnType<typeof initDb>) {
   }
 
   if (toRemove.length === 0) {
-    // Mark as done so we don't check again
     db.prepare("INSERT INTO adjustment_log (asset_id, league_type_id, old_value, new_value, delta, reason, detail) VALUES (0, 0, 0, 0, 0, 'manual', ?)").run(CLEANUP_KEY);
     console.log('  No retired players found.');
     return;
@@ -110,17 +109,25 @@ async function cleanupRetiredPlayers(db: ReturnType<typeof initDb>) {
   const assetIds = db.prepare(`SELECT id FROM assets WHERE player_id IN (${placeholders})`).all(...toRemove).map((r: any) => r.id);
   const assetPH = assetIds.map(() => '?').join(',');
 
-  db.transaction(() => {
-    if (assetIds.length > 0) {
-      db.prepare(`DELETE FROM adjustment_log WHERE asset_id IN (${assetPH})`).run(...assetIds);
-      db.prepare(`DELETE FROM asset_values WHERE asset_id IN (${assetPH})`).run(...assetIds);
-      db.prepare(`DELETE FROM value_history WHERE asset_id IN (${assetPH})`).run(...assetIds);
-    }
-    db.prepare(`DELETE FROM weekly_stats WHERE player_id IN (${placeholders})`).run(...toRemove);
-    db.prepare(`DELETE FROM assets WHERE player_id IN (${placeholders})`).run(...toRemove);
-    db.prepare(`DELETE FROM players WHERE id IN (${placeholders})`).run(...toRemove);
-    db.prepare("INSERT INTO adjustment_log (asset_id, league_type_id, old_value, new_value, delta, reason, detail) VALUES (0, 0, 0, 0, 0, 'manual', ?)").run(CLEANUP_KEY);
-  })();
+  // Disable FK checks for cleanup to avoid cascading constraint issues
+  db.pragma('foreign_keys = OFF');
+  try {
+    db.transaction(() => {
+      if (assetIds.length > 0) {
+        db.prepare(`DELETE FROM adjustment_log WHERE asset_id IN (${assetPH})`).run(...assetIds);
+        db.prepare(`DELETE FROM asset_values WHERE asset_id IN (${assetPH})`).run(...assetIds);
+        db.prepare(`DELETE FROM value_history WHERE asset_id IN (${assetPH})`).run(...assetIds);
+      }
+      if (toRemove.length > 0) {
+        db.prepare(`DELETE FROM weekly_stats WHERE player_id IN (${placeholders})`).run(...toRemove);
+        db.prepare(`DELETE FROM assets WHERE player_id IN (${placeholders})`).run(...toRemove);
+        db.prepare(`DELETE FROM players WHERE id IN (${placeholders})`).run(...toRemove);
+      }
+      db.prepare("INSERT INTO adjustment_log (asset_id, league_type_id, old_value, new_value, delta, reason, detail) VALUES (0, 0, 0, 0, 0, 'manual', ?)").run(CLEANUP_KEY);
+    })();
+  } finally {
+    db.pragma('foreign_keys = ON');
+  }
 
   const remaining = (db.prepare('SELECT COUNT(*) as c FROM players').get() as any).c;
   console.log(`  Removed ${toRemove.length} retired players. ${remaining} players remaining.`);
