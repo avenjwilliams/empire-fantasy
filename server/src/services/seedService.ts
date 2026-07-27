@@ -177,7 +177,7 @@ export async function seed(db: Database.Database, config: SeedConfig): Promise<v
   console.log(`  Found ${sleeperPlayers.length} eligible players`);
 
   // Remove players in DB but not in current cache (retired, removed from cache, etc.)
-  const cacheIds = new Set(sleeperPlayers.map(p => p.player_id));
+  const cacheIds = new Set(sleeperPlayers.map(p => String(p.player_id)));
   const orphanedPlayers = db.prepare(`
     SELECT p.id, p.name FROM players p
     WHERE p.sleeper_id NOT IN (${Array(cacheIds.size).fill('?').join(',')})
