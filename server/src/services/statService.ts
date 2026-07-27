@@ -9,6 +9,10 @@ import {
   computeExpectations,
   populationStddev,
   MIN_VALUE_FOR_EXPECTATION,
+  INACTIVE_THRESHOLD_WEEKS,
+  INACTIVE_DECAY_RATE,
+  INACTIVE_FLOOR,
+  INACTIVE_MIN_VALUE,
 } from '@empire-fantasy/shared';
 import type { Position, RecScoring, TEPSetting, Format, WeekStats } from '@empire-fantasy/shared';
 
@@ -218,6 +222,76 @@ export function applyPerformanceAdjustments(
   return { adjustments: totalAdjustments, skipped: totalSkipped };
 }
 
+// ---- Inactive Decay ----
+
+export function applyInactiveDecay(
+  db: Database.Database,
+  currentSeason: number,
+  currentWeek: number,
+): { decayed: number } {
+  const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
+
+  // Only run if we have processed weeks this season (we're in-season)
+  const hasProcessed = db.prepare(
+    'SELECT 1 FROM processed_weeks WHERE season = ? LIMIT 1'
+  ).get(currentSeason);
+  if (!hasProcessed) return { decayed: 0 };
+
+  const leagueTypes = db.prepare('SELECT * FROM league_types').all() as {
+    id: number; code: string; format: string;
+  }[];
+
+  const updateValue = db.prepare(
+    'UPDATE asset_values SET value = ?, updated_at = ? WHERE asset_id = ? AND league_type_id = ?'
+  );
+  const insertLog = db.prepare(`
+    INSERT INTO adjustment_log (asset_id, league_type_id, old_value, new_value, delta, reason, detail)
+    VALUES (?, ?, ?, ?, ?, 'stat', ?)
+  `);
+
+  let decayed = 0;
+
+  const applyAll = db.transaction(() => {
+    for (const lt of leagueTypes) {
+      // Find players with value above floor who have no recent stats
+      const candidates = db.prepare(`
+        SELECT av.asset_id, av.value, p.id as playerId, p.name
+        FROM asset_values av
+        JOIN assets a ON av.asset_id = a.id
+        JOIN players p ON a.player_id = p.id
+        WHERE av.league_type_id = ? AND av.value > ?
+        AND NOT EXISTS (
+          SELECT 1 FROM weekly_stats ws
+          WHERE ws.player_id = p.id
+          AND (ws.season > ? OR (ws.season = ? AND ws.week > ?))
+        )
+      `).all(
+        lt.id, INACTIVE_MIN_VALUE,
+        currentSeason, currentSeason, currentWeek - INACTIVE_THRESHOLD_WEEKS,
+      ) as { asset_id: number; value: number; playerId: number; name: string }[];
+
+      for (const c of candidates) {
+        const oldValue = c.value;
+        const newValue = clampRound(oldValue * (1 - INACTIVE_DECAY_RATE));
+        if (newValue === oldValue) continue;
+
+        const delta = Math.round((newValue - oldValue) * 10) / 10;
+        updateValue.run(newValue, now, c.asset_id, lt.id);
+
+        const detail = JSON.stringify({
+          inactive_weeks: INACTIVE_THRESHOLD_WEEKS,
+          decay_rate: INACTIVE_DECAY_RATE,
+        });
+        insertLog.run(c.asset_id, lt.id, oldValue, newValue, delta, detail);
+        decayed++;
+      }
+    }
+  });
+
+  applyAll();
+  return { decayed };
+}
+
 // ---- Main Ingest Function ----
 
 export function ingestWeek(db: Database.Database, config: IngestConfig): void {
@@ -247,14 +321,19 @@ export function ingestWeek(db: Database.Database, config: IngestConfig): void {
   console.log(`  Stored ${stored} player stat rows`);
 
   // Step 3: Apply performance adjustments across all league types
-  console.log('\n[3/4] Applying performance adjustments...');
+  console.log('\n[3/5] Applying performance adjustments...');
   const { adjustments, skipped } = applyPerformanceAdjustments(
     db, config.season, config.week,
   );
   console.log(`  ${adjustments} adjustments applied, ${skipped} skipped (< 2 at position)`);
 
-  // Step 4: Mark week as processed
-  console.log('\n[4/4] Marking week as processed...');
+  // Step 4: Apply inactive decay for players with no recent stats
+  console.log('\n[4/5] Applying inactive decay...');
+  const { decayed } = applyInactiveDecay(db, config.season, config.week);
+  console.log(`  ${decayed} values decayed for inactive players`);
+
+  // Step 5: Mark week as processed
+  console.log('\n[5/5] Marking week as processed...');
   if (existing && config.force) {
     db.prepare('UPDATE processed_weeks SET processed_at = datetime(\'now\') WHERE season = ? AND week = ?')
       .run(config.season, config.week);

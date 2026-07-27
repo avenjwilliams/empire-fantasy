@@ -119,7 +119,7 @@ async function loadSleeperPlayers(config: SeedConfig): Promise<SleeperPlayer[]> 
 
 function loadSeedRankings(config: SeedConfig, setCode: string): SeedRankingRow[] {
   // Try manual CSVs first, then fixture (both sets share the fixture in test mode)
-  const manualPath = path.join(config.dataDir, `raw/seed-rankings/${setCode}.csv`);
+  const manualPath = path.join(config.dataDir, `seed-rankings/${setCode}.csv`);
   const fixturePath = path.join(config.dataDir, 'fixtures/seed-rankings.sample.csv');
 
   const csvPath = config.fixturesMode
@@ -286,31 +286,19 @@ export async function seed(db: Database.Database, config: SeedConfig): Promise<v
     return baseValues;
   }
 
-  // Step 2: Load dynasty seed rankings (DYN_1QB as primary base)
+  // Step 2: Load all 4 base rankings from CSVs
   console.log('\n[2/7] Loading seed rankings...');
-  const dynRankings = loadSeedRankings(config, 'DYN_1QB');
-  const dynBaseValues = matchAndValueRankings(dynRankings, 'DYN_1QB');
+  const dyn1qbRankings = loadSeedRankings(config, 'DYN_1QB');
+  const dyn1qbBase = matchAndValueRankings(dyn1qbRankings, 'DYN_1QB');
 
-  // Load redraft seed rankings (RED_1QB) — independent source, not derived from dynasty
-  let redBaseValues: Map<number, { value: number; position: Position }>;
-  const redManualPath = path.join(config.dataDir, 'raw/seed-rankings/RED_1QB.csv');
-  const hasRedraftCSV = !config.fixturesMode && fs.existsSync(redManualPath);
+  const red1qbRankings = loadSeedRankings(config, 'RED_1QB');
+  const red1qbBase = matchAndValueRankings(red1qbRankings, 'RED_1QB');
 
-  if (hasRedraftCSV) {
-    const redRankings = loadSeedRankings(config, 'RED_1QB');
-    redBaseValues = matchAndValueRankings(redRankings, 'RED_1QB');
-  } else if (config.fixturesMode) {
-    // In fixtures mode, both sets use the same fixture (structural testing)
-    redBaseValues = matchAndValueRankings(loadSeedRankings(config, 'RED_1QB'), 'RED_1QB');
-  } else {
-    // Fallback: derive from dynasty values (preserves old behavior)
-    console.log('  WARNING: RED_1QB.csv not found, deriving redraft from dynasty values');
-    redBaseValues = new Map();
-    for (const [assetId, { value, position }] of dynBaseValues) {
-      const compressed = value > 70 ? value * 0.98 : value * 1.03;
-      redBaseValues.set(assetId, { value: clampRound(compressed), position });
-    }
-  }
+  const dynSfRankings = loadSeedRankings(config, 'DYN_SF');
+  const dynSfBase = matchAndValueRankings(dynSfRankings, 'DYN_SF');
+
+  const redSfRankings = loadSeedRankings(config, 'RED_SF');
+  const redSfBase = matchAndValueRankings(redSfRankings, 'RED_SF');
 
   // Step 3: Generate values for all 4 base sets
   console.log('\n[3/7] Computing 4 base sets...');
@@ -321,40 +309,29 @@ export async function seed(db: Database.Database, config: SeedConfig): Promise<v
   // Base sets: DYN_1QB_PPR_STD, DYN_SF_PPR_STD, RED_1QB_PPR_STD, RED_SF_PPR_STD
   const baseSetMap = new Map<string, Map<number, number>>(); // code -> assetId -> value
 
-  // For SF sets: boost QBs by ~20-25% of gap to 100 (SF makes QBs much more valuable)
-  function computeSFValues(base: Map<number, { value: number; position: Position }>): Map<number, number> {
-    const sfMap = new Map<number, number>();
-    for (const [assetId, { value, position }] of base) {
-      if (position === 'QB') {
-        const boost = (100 - value) * 0.25;
-        sfMap.set(assetId, clampRound(value + boost));
-      } else {
-        sfMap.set(assetId, clampRound(value * 0.97));
-      }
-    }
-    return sfMap;
-  }
-
-  // DYN_1QB: from dynasty consensus rankings
+  // DYN_1QB: from dynasty 1QB consensus rankings
   const dyn1qb = new Map<number, number>();
-  for (const [id, { value }] of dynBaseValues) dyn1qb.set(id, value);
+  for (const [id, { value }] of dyn1qbBase) dyn1qb.set(id, value);
   baseSetMap.set('DYN_1QB', dyn1qb);
 
-  // DYN_SF: boost QBs from dynasty base
-  const dynSF = computeSFValues(dynBaseValues);
+  // DYN_SF: from dynasty SF consensus rankings (loaded directly, not computed)
+  const dynSF = new Map<number, number>();
+  for (const [id, { value }] of dynSfBase) dynSF.set(id, value);
   baseSetMap.set('DYN_SF', dynSF);
 
-  // RED_1QB: from redraft consensus rankings (independent source)
+  // RED_1QB: from redraft 1QB consensus rankings
   const red1qb = new Map<number, number>();
-  for (const [id, { value }] of redBaseValues) red1qb.set(id, value);
+  for (const [id, { value }] of red1qbBase) red1qb.set(id, value);
   baseSetMap.set('RED_1QB', red1qb);
 
-  // RED_SF: boost QBs from redraft base
-  const redSF = computeSFValues(redBaseValues);
+  // RED_SF: from redraft SF consensus rankings (loaded directly, not computed)
+  const redSF = new Map<number, number>();
+  for (const [id, { value }] of redSfBase) redSF.set(id, value);
   baseSetMap.set('RED_SF', redSF);
 
-  // baseValues used by expansion step (line 363) to look up position per asset
-  const baseValues = dynBaseValues;
+  // baseValues used by expansion step to look up position per asset
+  // Use dyn1qb as the canonical position lookup (all bases share the same player pool)
+  const baseValues = dyn1qbBase;
 
   // Step 4: Expand 4 base sets → 24 league types
   console.log('\n[4/7] Expanding to 24 league types...');

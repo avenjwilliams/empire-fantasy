@@ -81,3 +81,15 @@ export const AGE_NUDGE: Record<string, { minAge: number; nudge: number }> = {
 
 /** Minimum value to include in the expectation model */
 export const MIN_VALUE_FOR_EXPECTATION = 5;
+
+/** Inactive decay: weeks without stats before decay starts */
+export const INACTIVE_THRESHOLD_WEEKS = 8;
+
+/** Inactive decay: multiplicative decay rate per week after threshold */
+export const INACTIVE_DECAY_RATE = 0.15;
+
+/** Inactive decay: floor value (minimum) */
+export const INACTIVE_FLOOR = 1.0;
+
+/** Inactive decay: only decay players above this value */
+export const INACTIVE_MIN_VALUE = 5;
