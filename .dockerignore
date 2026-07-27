@@ -5,5 +5,4 @@ node_modules
 *.db-shm
 *.db-wal
 data/raw
-data/rankings
 .git-credentials

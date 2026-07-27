@@ -82,6 +82,16 @@ Re-running the same week is a no-op (idempotent). Use `--force` to reprocess.
 
 Each changed value is logged as `reason='manual'` in the adjustment log.
 
+**This only updates your local `empire-fantasy.db`.** Production has its own database on the `ef_data` volume — it's seeded once on first boot and never touched by local scripts or `fly deploy` (which only ships code). To get edited CSVs live:
+
+```
+git add -A && git commit -m "Update rankings" && git push origin main
+fly deploy
+fly ssh console -a empire-fantasy -C "npm run rankings:import"
+```
+
+The image bundles `data/rankings/`, `scripts/`, and `server/src` specifically so this command can run inside the deployed container. `rankings:import` and `rankings:export` both respect `DATABASE_PATH`/`DATA_DIR`, so run from the container they operate on `/data/empire-fantasy.db`, not the local dev DB.
+
 ### Daily snapshot
 
 Run `npm run snapshot` once per day to power value-over-time charts on the player detail page. This copies current `asset_values` into `value_history` for the current date.

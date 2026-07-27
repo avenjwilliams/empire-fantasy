@@ -68,13 +68,12 @@ app.listen(PORT, '0.0.0.0', async () => {
 });
 
 async function cleanupRetiredPlayers(db: ReturnType<typeof initDb>) {
-  const CLEANUP_KEY = 'retired_cleanup_v1';
-  // Check if cleanup was already done (use _migrations_done table)
+  const CLEANUP_KEY = 'retired_cleanup_v2';
   try {
     const alreadyDone = db.prepare("SELECT 1 FROM _migrations_done WHERE key = ?").get(CLEANUP_KEY);
     if (alreadyDone) return;
   } catch {
-    // Table doesn't exist yet, which means cleanup hasn't run
+    // Table doesn't exist yet
   }
 
   console.log('Checking for retired players to remove...');
@@ -83,25 +82,23 @@ async function cleanupRetiredPlayers(db: ReturnType<typeof initDb>) {
   const raw: Record<string, any> = await res.json();
 
   const positions = ['QB', 'RB', 'WR', 'TE'];
-  const sleeperData = new Map<string, { years_exp: number; age: number | null; team: string | null }>();
+  const sleeperData = new Map<string, { status: string; team: string | null }>();
   for (const [id, p] of Object.entries(raw)) {
     if (!positions.includes(p.position)) continue;
-    sleeperData.set(id, { years_exp: p.years_exp ?? 0, age: p.age ?? null, team: p.team });
+    sleeperData.set(id, { status: p.status ?? 'Active', team: p.team });
   }
 
   const players = db.prepare('SELECT id, sleeper_id, name, position, team FROM players').all() as {
     id: number; sleeper_id: string; name: string; position: string; team: string | null;
   }[];
 
+  // Remove no-team players where Sleeper status is not "Active" (Inactive, IR, etc.)
   const toRemove: number[] = [];
   for (const p of players) {
     const d = sleeperData.get(p.sleeper_id);
     if (!d || p.team) continue;
-    const yearsExp = d.years_exp;
-    const age = d.age ?? 0;
-    if (yearsExp >= 12) toRemove.push(p.id);
-    else if (yearsExp >= 10 && age >= 33) toRemove.push(p.id);
-    else if (yearsExp >= 8 && age >= 35) toRemove.push(p.id);
+    const statusLower = (d.status || '').toLowerCase();
+    if (statusLower !== 'active') toRemove.push(p.id);
   }
 
   if (toRemove.length === 0) {

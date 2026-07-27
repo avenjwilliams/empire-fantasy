@@ -11,11 +11,9 @@
 
 ### Seed source priority
 
-1. **Manual CSVs (preferred)**: if `data/raw/seed-rankings/{DYN_1QB,DYN_SF,RED_1QB,RED_SF}.csv` exist, use them. Format: `rank,name,position,team` (name+position matched to Sleeper players fuzzily; report unmatched rows, don't fail). These are FantasyPros consensus CSVs downloaded by hand — most reliable path.
-2. **Scrape FantasyPros** if manual CSVs absent. Keep the scraper isolated in `scripts/` so failures never affect app runtime.
-3. **Sleeper ADP/search-rank fallback** if scraping fails; log a TODO.
-
-Implement behind a single `SeedSource` interface so the three are interchangeable.
+1. **Manual CSVs (preferred)**: `data/raw/seed-rankings/{DYN_1QB,RED_1QB}.csv` — two independent base sets loaded by `seedService`. Format: `rank,name,position,team` (name+position matched to Sleeper players fuzzily; report unmatched rows, don't fail). Expert consensus CSVs downloaded by hand from FantasyPros, ESPN, SI.com, etc. SF variants (`DYN_SF`, `RED_SF`) are derived mechanically by boosting QB values — no separate CSVs needed.
+2. **Fallback** if `RED_1QB.csv` absent: redraft values are derived from dynasty via range compression (>70: ×0.98, ≤70: ×1.03). A warning is logged.
+3. **Fixture fallback** if `DYN_1QB.csv` also absent: uses `data/fixtures/seed-rankings.sample.csv` (60-player sample). Adequate for testing, not for production seeding.
 
 ## Fixtures (data/fixtures/)
 
@@ -63,6 +61,7 @@ asset_id,kind,name,position,team,age,value
 - `export-rankings.ts`: DB → CSVs (overwrite).
 - `import-rankings.ts`: read CSVs, diff `value` against DB per asset/league type; for each difference, update `asset_values` and log `reason='manual'` with `detail={"file":"DYN_SF_PPR_TEP.csv"}`. Only `value` is writable via CSV; other columns are informational.
 - Print a summary of changes on import. Refuse values outside [1.0, 100.0].
+- Both scripts resolve the DB via `DATABASE_PATH` (falling back to the local `empire-fantasy.db`) and the rankings dir via `DATA_DIR` — this is what lets `rankings:import` be run inside the deployed container against the production DB. The Dockerfile bundles `data/rankings/`, `scripts/`, and `server/src` for exactly this. Editing a CSV locally never affects production on its own — see the "Editing rankings manually" runbook in `README.md` for the full commit → deploy → `fly ssh console` sequence.
 
 ## Weekly stat ingestion (scripts/ingest-week.ts)
 

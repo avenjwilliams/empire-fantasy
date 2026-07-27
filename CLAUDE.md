@@ -60,6 +60,7 @@ See README.md for the full season-operations runbook.
 - Remote: `origin` → `https://github.com/avenjwilliams/empire-fantasy.git`, branch `main`.
 - Auth: fine-grained PAT in `.git-credentials` at repo root (gitignored, never commit). If a fresh environment can't push: `git config credential.helper "store --file=$(git rev-parse --show-toplevel)/.git-credentials"`.
 - `.gitignore` excludes the SQLite DB and `data/raw/`; `data/fixtures/` and `data/rankings/` ARE committed.
+- **Cowork sandbox cannot run git commits here** (it can't unlink files, so git's lock/temp files get stuck). All git operations must run from Claude Code or a local terminal. If a Cowork session left a stuck lock: `rm -f .git/index.lock`.
 
 ## Conventions
 

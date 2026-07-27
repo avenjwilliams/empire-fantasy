@@ -52,7 +52,16 @@
       "Bash(~/.fly/bin/flyctl status:*)",
       "Bash(~/.fly/bin/flyctl logs:*)",
       "Bash(~/.fly/bin/flyctl machine:*)",
-      "Bash(~/.fly/bin/flyctl ssh:*)"
+      "Bash(~/.fly/bin/flyctl ssh:*)",
+      "Bash(head -5 /Users/avenwilliams/Documents/\"Empire Fantasy Claude\"/data/rankings/*.csv)",
+      "WebSearch",
+      "WebFetch(domain:www.fantasypros.com)",
+      "WebFetch(domain:keeptradecut.com)",
+      "WebFetch(domain:www.pff.com)",
+      "WebFetch(domain:sports.yahoo.com)",
+      "WebFetch(domain:fantraxhq.com)",
+      "WebFetch(domain:www.si.com)",
+      "WebFetch(domain:www.espn.com)"
     ]
   }
 }

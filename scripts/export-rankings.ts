@@ -6,6 +6,7 @@ import { initDb, closeDb } from '../server/src/db/db.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '..');
+const DATA_DIR = process.env.DATA_DIR || path.join(PROJECT_ROOT, 'data');
 
 export function exportRankings(db: Database.Database, rankingsDir: string): void {
   if (!fs.existsSync(rankingsDir)) {
@@ -71,7 +72,8 @@ export function exportRankings(db: Database.Database, rankingsDir: string): void
 // Run as standalone script
 const isMain = process.argv[1]?.includes('export-rankings');
 if (isMain) {
-  const db = initDb(path.join(PROJECT_ROOT, 'empire-fantasy.db'));
-  exportRankings(db, path.join(PROJECT_ROOT, 'data/rankings'));
+  const dbPath = process.env.DATABASE_PATH || path.join(PROJECT_ROOT, 'empire-fantasy.db');
+  const db = initDb(dbPath);
+  exportRankings(db, path.join(DATA_DIR, 'rankings'));
   closeDb();
 }

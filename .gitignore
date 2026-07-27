@@ -8,3 +8,5 @@ data/raw/
 .env
 .DS_Store
 .git-credentials
+*.tsbuildinfo
+.claude/settings.local.json

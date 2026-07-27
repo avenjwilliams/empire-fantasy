@@ -10,19 +10,26 @@ const PROJECT_ROOT = path.resolve(__dirname, '..');
 
 const fixturesMode = process.argv.includes('--fixtures') || process.env.EF_FIXTURES === '1';
 
-const dbPath = path.join(PROJECT_ROOT, 'empire-fantasy.db');
-const db = initDb(dbPath);
+async function main() {
+  const dbPath = path.join(PROJECT_ROOT, 'empire-fantasy.db');
+  const db = initDb(dbPath);
 
-// Ensure league types are seeded first
-seedLeagueTypes(db);
+  // Ensure league types are seeded first
+  seedLeagueTypes(db);
 
-await seed(db, {
-  fixturesMode,
-  dataDir: path.join(PROJECT_ROOT, 'data'),
+  await seed(db, {
+    fixturesMode,
+    dataDir: path.join(PROJECT_ROOT, 'data'),
+  });
+
+  // Export rankings after seed
+  console.log('\nExporting rankings to CSV...');
+  exportRankings(db, path.join(PROJECT_ROOT, 'data/rankings'));
+
+  closeDb();
+}
+
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
 });
-
-// Export rankings after seed
-console.log('\nExporting rankings to CSV...');
-exportRankings(db, path.join(PROJECT_ROOT, 'data/rankings'));
-
-closeDb();

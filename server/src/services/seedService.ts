@@ -73,14 +73,8 @@ function parseSleeperPlayers(raw: Record<string, any>): SleeperPlayer[] {
     const isNotable = (p.search_rank ?? 9999) < 500;
     if (!hasTeam && !isNotable) continue;
 
-    // Filter: remove retired/out-of-NFL players (no team + veteran)
-    if (!hasTeam) {
-      const yearsExp = p.years_exp ?? 0;
-      const age = p.age ?? 0;
-      if (yearsExp >= 12) continue;                                    // Definitely retired
-      if (yearsExp >= 10 && age >= 33) continue;                       // Likely retired
-      if (yearsExp >= 8 && age >= 35) continue;                        // Definitely retired
-    }
+    // Filter: remove players where Sleeper status is not "Active" (Inactive, IR, etc.)
+    if (!hasTeam && p.status && p.status.toLowerCase() !== 'active') continue;
 
     players.push({
       player_id: p.player_id,

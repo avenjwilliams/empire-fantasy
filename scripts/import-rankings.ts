@@ -6,10 +6,12 @@ import { initDb, closeDb } from '../server/src/db/db.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '..');
-const RANKINGS_DIR = path.join(PROJECT_ROOT, 'data/rankings');
+const DATA_DIR = process.env.DATA_DIR || path.join(PROJECT_ROOT, 'data');
+const RANKINGS_DIR = path.join(DATA_DIR, 'rankings');
 
 function main(): void {
-  const db = initDb(path.join(PROJECT_ROOT, 'empire-fantasy.db'));
+  const dbPath = process.env.DATABASE_PATH || path.join(PROJECT_ROOT, 'empire-fantasy.db');
+  const db = initDb(dbPath);
   const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
 
   const leagueTypes = db.prepare('SELECT id, code FROM league_types').all() as {
