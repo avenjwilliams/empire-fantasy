@@ -11,3 +11,5 @@ data/raw/*
 .git-credentials
 *.tsbuildinfo
 .claude/settings.local.json
+# Raw ADP CSVs (user's local copies, not for repo)
+/*-Sheet1.csv
