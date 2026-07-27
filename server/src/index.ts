@@ -69,8 +69,13 @@ app.listen(PORT, '0.0.0.0', async () => {
 
 async function cleanupRetiredPlayers(db: ReturnType<typeof initDb>) {
   const CLEANUP_KEY = 'retired_cleanup_v1';
-  const alreadyDone = db.prepare("SELECT 1 FROM adjustment_log WHERE detail = ? LIMIT 1").get(CLEANUP_KEY);
-  if (alreadyDone) return;
+  // Check if cleanup was already done (use _migrations_done table)
+  try {
+    const alreadyDone = db.prepare("SELECT 1 FROM _migrations_done WHERE key = ?").get(CLEANUP_KEY);
+    if (alreadyDone) return;
+  } catch {
+    // Table doesn't exist yet, which means cleanup hasn't run
+  }
 
   console.log('Checking for retired players to remove...');
   const res = await fetch('https://api.sleeper.app/v1/players/nfl');
@@ -100,7 +105,13 @@ async function cleanupRetiredPlayers(db: ReturnType<typeof initDb>) {
   }
 
   if (toRemove.length === 0) {
-    db.prepare("INSERT INTO adjustment_log (asset_id, league_type_id, old_value, new_value, delta, reason, detail) VALUES (0, 0, 0, 0, 0, 'manual', ?)").run(CLEANUP_KEY);
+    db.pragma('foreign_keys = OFF');
+    try {
+      db.prepare("CREATE TABLE IF NOT EXISTS _migrations_done (key TEXT PRIMARY KEY)").run();
+      db.prepare("INSERT OR IGNORE INTO _migrations_done (key) VALUES (?)").run(CLEANUP_KEY);
+    } finally {
+      db.pragma('foreign_keys = ON');
+    }
     console.log('  No retired players found.');
     return;
   }
@@ -112,19 +123,19 @@ async function cleanupRetiredPlayers(db: ReturnType<typeof initDb>) {
   // Disable FK checks for cleanup to avoid cascading constraint issues
   db.pragma('foreign_keys = OFF');
   try {
-    db.transaction(() => {
-      if (assetIds.length > 0) {
-        db.prepare(`DELETE FROM adjustment_log WHERE asset_id IN (${assetPH})`).run(...assetIds);
-        db.prepare(`DELETE FROM asset_values WHERE asset_id IN (${assetPH})`).run(...assetIds);
-        db.prepare(`DELETE FROM value_history WHERE asset_id IN (${assetPH})`).run(...assetIds);
-      }
-      if (toRemove.length > 0) {
-        db.prepare(`DELETE FROM weekly_stats WHERE player_id IN (${placeholders})`).run(...toRemove);
-        db.prepare(`DELETE FROM assets WHERE player_id IN (${placeholders})`).run(...toRemove);
-        db.prepare(`DELETE FROM players WHERE id IN (${placeholders})`).run(...toRemove);
-      }
-      db.prepare("INSERT INTO adjustment_log (asset_id, league_type_id, old_value, new_value, delta, reason, detail) VALUES (0, 0, 0, 0, 0, 'manual', ?)").run(CLEANUP_KEY);
-    })();
+    if (assetIds.length > 0) {
+      db.prepare(`DELETE FROM adjustment_log WHERE asset_id IN (${assetPH})`).run(...assetIds);
+      db.prepare(`DELETE FROM asset_values WHERE asset_id IN (${assetPH})`).run(...assetIds);
+      db.prepare(`DELETE FROM value_history WHERE asset_id IN (${assetPH})`).run(...assetIds);
+    }
+    if (toRemove.length > 0) {
+      db.prepare(`DELETE FROM weekly_stats WHERE player_id IN (${placeholders})`).run(...toRemove);
+      db.prepare(`DELETE FROM assets WHERE player_id IN (${placeholders})`).run(...toRemove);
+      db.prepare(`DELETE FROM players WHERE id IN (${placeholders})`).run(...toRemove);
+    }
+    // Use a simple table to mark cleanup as done (avoids FK issue with asset_id=0)
+    db.prepare("CREATE TABLE IF NOT EXISTS _migrations_done (key TEXT PRIMARY KEY)").run();
+    db.prepare("INSERT OR IGNORE INTO _migrations_done (key) VALUES (?)").run(CLEANUP_KEY);
   } finally {
     db.pragma('foreign_keys = ON');
   }
