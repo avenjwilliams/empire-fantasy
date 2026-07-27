@@ -37,7 +37,6 @@ interface SeedConfig {
 
 const VALID_POSITIONS: Position[] = ['QB', 'RB', 'WR', 'TE'];
 const MAX_PLAYERS = 800;
-const SLEEPER_PLAYERS_URL = 'https://api.sleeper.app/v1/players/nfl';
 
 // ------ Rank → Value Curve ------
 
@@ -53,13 +52,6 @@ export function rankToValue(rank: number, totalPlayers: number): number {
 }
 
 // ------ Player Loading ------
-
-async function fetchSleeperPlayersFromAPI(): Promise<Record<string, any>> {
-  console.log('  Fetching players from Sleeper API...');
-  const res = await fetch(SLEEPER_PLAYERS_URL);
-  if (!res.ok) throw new Error(`Sleeper API returned ${res.status}`);
-  return res.json();
-}
 
 function parseSleeperPlayers(raw: Record<string, any>): SleeperPlayer[] {
   const players: SleeperPlayer[] = [];
@@ -103,24 +95,15 @@ function parseSleeperPlayers(raw: Record<string, any>): SleeperPlayer[] {
   return players.slice(0, MAX_PLAYERS);
 }
 
-async function loadSleeperPlayers(config: SeedConfig): Promise<SleeperPlayer[]> {
+function loadSleeperPlayers(config: SeedConfig): SleeperPlayer[] {
   let raw: Record<string, any>;
 
   if (config.fixturesMode) {
     const filePath = path.join(config.dataDir, 'fixtures/sleeper-players.sample.json');
     raw = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
   } else {
-    // Try local cache first, then fetch from API
     const cachePath = path.join(config.dataDir, 'raw/sleeper-players.json');
-    if (fs.existsSync(cachePath)) {
-      raw = JSON.parse(fs.readFileSync(cachePath, 'utf-8'));
-    } else {
-      raw = await fetchSleeperPlayersFromAPI();
-      // Cache for next time (create dir if needed)
-      const dir = path.dirname(cachePath);
-      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-      fs.writeFileSync(cachePath, JSON.stringify(raw));
-    }
+    raw = JSON.parse(fs.readFileSync(cachePath, 'utf-8'));
   }
 
   return parseSleeperPlayers(raw);
@@ -190,8 +173,34 @@ export async function seed(db: Database.Database, config: SeedConfig): Promise<v
 
   // Step 1: Load and insert players
   console.log('\n[1/7] Loading players...');
-  const sleeperPlayers = await loadSleeperPlayers(config);
+  const sleeperPlayers = loadSleeperPlayers(config);
   console.log(`  Found ${sleeperPlayers.length} eligible players`);
+
+  // Remove players in DB but not in current cache (retired, removed from cache, etc.)
+  const cacheIds = new Set(sleeperPlayers.map(p => p.player_id));
+  const orphanedPlayers = db.prepare(`
+    SELECT p.id, p.name FROM players p
+    WHERE p.sleeper_id NOT IN (${Array(cacheIds.size).fill('?').join(',')})
+  `).all(...cacheIds) as { id: number; name: string }[];
+
+  if (orphanedPlayers.length > 0) {
+    console.log(`  Cleaning ${orphanedPlayers.length} players not in cache...`);
+    db.pragma('foreign_keys = OFF');
+    const cleanOrphans = db.transaction(() => {
+      for (const p of orphanedPlayers) {
+        db.prepare('DELETE FROM weekly_stats WHERE player_id = ?').run(p.id);
+        const asset = db.prepare('SELECT id FROM assets WHERE player_id = ?').get(p.id) as { id: number } | undefined;
+        if (asset) {
+          db.prepare('DELETE FROM asset_values WHERE asset_id = ?').run(asset.id);
+          db.prepare('DELETE FROM adjustment_log WHERE asset_id = ?').run(asset.id);
+          db.prepare('DELETE FROM assets WHERE id = ?').run(asset.id);
+        }
+        db.prepare('DELETE FROM players WHERE id = ?').run(p.id);
+      }
+    });
+    cleanOrphans();
+    db.pragma('foreign_keys = ON');
+  }
 
   const insertPlayer = db.prepare(`
     INSERT OR IGNORE INTO players (sleeper_id, name, position, team, age, status)

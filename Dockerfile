@@ -14,6 +14,7 @@ COPY shared/ shared/
 COPY server/ server/
 COPY client/ client/
 COPY data/fixtures/ data/fixtures/
+COPY data/raw/sleeper-players.json data/raw/sleeper-players.json
 COPY tsconfig.base.json ./
 
 # Build shared (needed by both client and server)
@@ -61,6 +62,7 @@ COPY tsconfig.base.json ./
 COPY server/tsconfig.json server/
 COPY data/rankings/ data/rankings/
 COPY data/seed-rankings/ data/seed-rankings/
+COPY data/raw/sleeper-players.json data/raw/sleeper-players.json
 
 ENV NODE_ENV=production
 ENV PORT=8080

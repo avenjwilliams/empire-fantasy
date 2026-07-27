@@ -4,5 +4,6 @@ node_modules
 *.db
 *.db-shm
 *.db-wal
-data/raw
+data/raw/*
+!data/raw/sleeper-players.json
 .git-credentials

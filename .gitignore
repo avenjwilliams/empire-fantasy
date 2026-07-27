@@ -4,7 +4,8 @@ dist/
 *.db-shm
 *.db-wal
 *.sqlite
-data/raw/
+data/raw/*
+!data/raw/sleeper-players.json
 .env
 .DS_Store
 .git-credentials
