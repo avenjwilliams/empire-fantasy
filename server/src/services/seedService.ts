@@ -234,9 +234,9 @@ export async function seed(db: Database.Database, config: SeedConfig): Promise<v
   }
 
   const allAssets = db.prepare(`
-    SELECT a.id as asset_id, p.id as player_id, p.position
+    SELECT a.id as asset_id, p.id as player_id, p.position, p.team
     FROM assets a JOIN players p ON a.player_id = p.id
-  `).all() as { asset_id: number; player_id: number; position: string }[];
+  `).all() as { asset_id: number; player_id: number; position: string; team: string | null }[];
 
   // Match seed rankings to DB players and assign values via rankToValue curve.
   // Unranked players get tail-end values. Used for both dynasty and redraft bases.
@@ -275,10 +275,17 @@ export async function seed(db: Database.Database, config: SeedConfig): Promise<v
     console.log(`  [${label}] Matched ${rankedPlayers.length} of ${seedRankings.length} ranked entries`);
 
     // Assign tail-end values to unranked players
+    // Start AFTER all CSV entries so unranked players (including retired) are below every ADP-ranked player
     const rankedIds = new Set(rankedPlayers.map(r => r.playerId));
-    let nextRank = rankedPlayers.length + 1;
-    for (const a of allAssets) {
-      if (rankedIds.has(a.player_id)) continue;
+    const unrankedAssets = allAssets
+      .filter(a => !rankedIds.has(a.player_id))
+      .sort((a, b) => {
+        if (a.team && !b.team) return -1;
+        if (!a.team && b.team) return 1;
+        return 0;
+      });
+    let nextRank = seedRankings.length + 1;
+    for (const a of unrankedAssets) {
       const value = rankToValue(nextRank, allAssets.length);
       rankedPlayers.push({
         playerId: a.player_id,
