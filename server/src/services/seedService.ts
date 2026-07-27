@@ -20,6 +20,7 @@ interface SleeperPlayer {
   age: number | null;
   status: string;
   search_rank: number;
+  years_exp: number;
 }
 
 interface SeedRankingRow {
@@ -72,6 +73,15 @@ function parseSleeperPlayers(raw: Record<string, any>): SleeperPlayer[] {
     const isNotable = (p.search_rank ?? 9999) < 500;
     if (!hasTeam && !isNotable) continue;
 
+    // Filter: remove retired/out-of-NFL players (no team + veteran)
+    if (!hasTeam) {
+      const yearsExp = p.years_exp ?? 0;
+      const age = p.age ?? 0;
+      if (yearsExp >= 12) continue;                                    // Definitely retired
+      if (yearsExp >= 10 && age >= 33) continue;                       // Likely retired
+      if (yearsExp >= 8 && age >= 35) continue;                        // Definitely retired
+    }
+
     players.push({
       player_id: p.player_id,
       full_name: p.full_name,
@@ -80,6 +90,7 @@ function parseSleeperPlayers(raw: Record<string, any>): SleeperPlayer[] {
       age: p.age || null,
       status: p.status || 'Active',
       search_rank: p.search_rank ?? 9999,
+      years_exp: p.years_exp ?? 0,
     });
   }
 
@@ -112,9 +123,9 @@ async function loadSleeperPlayers(config: SeedConfig): Promise<SleeperPlayer[]> 
 
 // ------ Seed Rankings Loading ------
 
-function loadSeedRankings(config: SeedConfig): SeedRankingRow[] {
-  // Try manual CSVs first, then fixture
-  const manualPath = path.join(config.dataDir, 'raw/seed-rankings/DYN_1QB.csv');
+function loadSeedRankings(config: SeedConfig, setCode: string): SeedRankingRow[] {
+  // Try manual CSVs first, then fixture (both sets share the fixture in test mode)
+  const manualPath = path.join(config.dataDir, `raw/seed-rankings/${setCode}.csv`);
   const fixturePath = path.join(config.dataDir, 'fixtures/seed-rankings.sample.csv');
 
   const csvPath = config.fixturesMode
@@ -207,11 +218,6 @@ export async function seed(db: Database.Database, config: SeedConfig): Promise<v
   const assetCount = (db.prepare('SELECT COUNT(*) as c FROM assets WHERE kind = ?').get('player') as any).c;
   console.log(`  Inserted: ${playerCount} players, ${assetCount} player assets`);
 
-  // Step 2: Load seed rankings for base set (DYN_1QB as baseline)
-  console.log('\n[2/7] Loading seed rankings...');
-  const seedRankings = loadSeedRankings(config);
-  console.log(`  ${seedRankings.length} ranked entries`);
-
   // Build player lookup by normalized name
   const allPlayers = db.prepare('SELECT id, name, position FROM players').all() as { id: number; name: string; position: string }[];
   const playersByName = new Map<string, { id: number; position: string }[]>();
@@ -222,56 +228,94 @@ export async function seed(db: Database.Database, config: SeedConfig): Promise<v
     playersByName.set(key, arr);
   }
 
-  // Match rankings to players, assign values
-  type RankedPlayer = { playerId: number; assetId: number; position: Position; rank: number; value: number };
-  const rankedPlayers: RankedPlayer[] = [];
-  const unmatched: string[] = [];
-
-  for (const row of seedRankings) {
-    const playerId = matchPlayer(row.name, row.position, playersByName);
-    if (!playerId) {
-      unmatched.push(`${row.rank}: ${row.name} (${row.position})`);
-      continue;
-    }
-    const asset = db.prepare('SELECT id FROM assets WHERE player_id = ?').get(playerId) as { id: number } | undefined;
-    if (!asset) continue;
-
-    const value = rankToValue(row.rank, seedRankings.length);
-    rankedPlayers.push({
-      playerId,
-      assetId: asset.id,
-      position: row.position as Position,
-      rank: row.rank,
-      value,
-    });
-  }
-
-  if (unmatched.length > 0) {
-    console.log(`  WARNING: ${unmatched.length} unmatched rankings:`);
-    unmatched.slice(0, 5).forEach(u => console.log(`    ${u}`));
-    if (unmatched.length > 5) console.log(`    ... and ${unmatched.length - 5} more`);
-  }
-  console.log(`  Matched ${rankedPlayers.length} players to rankings`);
-
-  // Assign values to unranked players (give them minimum value based on position median)
-  const rankedIds = new Set(rankedPlayers.map(r => r.playerId));
   const allAssets = db.prepare(`
     SELECT a.id as asset_id, p.id as player_id, p.position
     FROM assets a JOIN players p ON a.player_id = p.id
   `).all() as { asset_id: number; player_id: number; position: string }[];
 
-  let nextRank = rankedPlayers.length + 1;
-  for (const a of allAssets) {
-    if (rankedIds.has(a.player_id)) continue;
-    const value = rankToValue(nextRank, allAssets.length);
-    rankedPlayers.push({
-      playerId: a.player_id,
-      assetId: a.asset_id,
-      position: a.position as Position,
-      rank: nextRank,
-      value,
-    });
-    nextRank++;
+  // Match seed rankings to DB players and assign values via rankToValue curve.
+  // Unranked players get tail-end values. Used for both dynasty and redraft bases.
+  function matchAndValueRankings(
+    seedRankings: SeedRankingRow[],
+    label: string,
+  ): Map<number, { value: number; position: Position }> {
+    type RankedPlayer = { playerId: number; assetId: number; position: Position; rank: number; value: number };
+    const rankedPlayers: RankedPlayer[] = [];
+    const unmatched: string[] = [];
+
+    for (const row of seedRankings) {
+      const playerId = matchPlayer(row.name, row.position, playersByName);
+      if (!playerId) {
+        unmatched.push(`${row.rank}: ${row.name} (${row.position})`);
+        continue;
+      }
+      const asset = db.prepare('SELECT id FROM assets WHERE player_id = ?').get(playerId) as { id: number } | undefined;
+      if (!asset) continue;
+
+      const value = rankToValue(row.rank, seedRankings.length);
+      rankedPlayers.push({
+        playerId,
+        assetId: asset.id,
+        position: row.position as Position,
+        rank: row.rank,
+        value,
+      });
+    }
+
+    if (unmatched.length > 0) {
+      console.log(`  WARNING [${label}]: ${unmatched.length} unmatched rankings:`);
+      unmatched.slice(0, 10).forEach(u => console.log(`    ${u}`));
+      if (unmatched.length > 10) console.log(`    ... and ${unmatched.length - 10} more`);
+    }
+    console.log(`  [${label}] Matched ${rankedPlayers.length} of ${seedRankings.length} ranked entries`);
+
+    // Assign tail-end values to unranked players
+    const rankedIds = new Set(rankedPlayers.map(r => r.playerId));
+    let nextRank = rankedPlayers.length + 1;
+    for (const a of allAssets) {
+      if (rankedIds.has(a.player_id)) continue;
+      const value = rankToValue(nextRank, allAssets.length);
+      rankedPlayers.push({
+        playerId: a.player_id,
+        assetId: a.asset_id,
+        position: a.position as Position,
+        rank: nextRank,
+        value,
+      });
+      nextRank++;
+    }
+
+    const baseValues = new Map<number, { value: number; position: Position }>();
+    for (const rp of rankedPlayers) {
+      baseValues.set(rp.assetId, { value: rp.value, position: rp.position });
+    }
+    return baseValues;
+  }
+
+  // Step 2: Load dynasty seed rankings (DYN_1QB as primary base)
+  console.log('\n[2/7] Loading seed rankings...');
+  const dynRankings = loadSeedRankings(config, 'DYN_1QB');
+  const dynBaseValues = matchAndValueRankings(dynRankings, 'DYN_1QB');
+
+  // Load redraft seed rankings (RED_1QB) — independent source, not derived from dynasty
+  let redBaseValues: Map<number, { value: number; position: Position }>;
+  const redManualPath = path.join(config.dataDir, 'raw/seed-rankings/RED_1QB.csv');
+  const hasRedraftCSV = !config.fixturesMode && fs.existsSync(redManualPath);
+
+  if (hasRedraftCSV) {
+    const redRankings = loadSeedRankings(config, 'RED_1QB');
+    redBaseValues = matchAndValueRankings(redRankings, 'RED_1QB');
+  } else if (config.fixturesMode) {
+    // In fixtures mode, both sets use the same fixture (structural testing)
+    redBaseValues = matchAndValueRankings(loadSeedRankings(config, 'RED_1QB'), 'RED_1QB');
+  } else {
+    // Fallback: derive from dynasty values (preserves old behavior)
+    console.log('  WARNING: RED_1QB.csv not found, deriving redraft from dynasty values');
+    redBaseValues = new Map();
+    for (const [assetId, { value, position }] of dynBaseValues) {
+      const compressed = value > 70 ? value * 0.98 : value * 1.03;
+      redBaseValues.set(assetId, { value: clampRound(compressed), position });
+    }
   }
 
   // Step 3: Generate values for all 4 base sets
@@ -283,57 +327,40 @@ export async function seed(db: Database.Database, config: SeedConfig): Promise<v
   // Base sets: DYN_1QB_PPR_STD, DYN_SF_PPR_STD, RED_1QB_PPR_STD, RED_SF_PPR_STD
   const baseSetMap = new Map<string, Map<number, number>>(); // code -> assetId -> value
 
-  // DYN_1QB is our baseline from seed rankings
-  const baseValues = new Map<number, { value: number; position: Position }>();
-  for (const rp of rankedPlayers) {
-    baseValues.set(rp.assetId, { value: rp.value, position: rp.position });
-  }
-
   // For SF sets: boost QBs by ~20-25% of gap to 100 (SF makes QBs much more valuable)
   function computeSFValues(base: Map<number, { value: number; position: Position }>): Map<number, number> {
     const sfMap = new Map<number, number>();
     for (const [assetId, { value, position }] of base) {
       if (position === 'QB') {
-        // Boost QB values in SF (top QBs are elite assets)
         const boost = (100 - value) * 0.25;
         sfMap.set(assetId, clampRound(value + boost));
       } else {
-        // Slightly decrease non-QB values to make room
         sfMap.set(assetId, clampRound(value * 0.97));
       }
     }
     return sfMap;
   }
 
-  // For RED sets: compress dynasty values (age/youth less relevant)
-  function computeRedraftValues(base: Map<number, { value: number; position: Position }>): Map<number, number> {
-    const redMap = new Map<number, number>();
-    // In redraft, current-year production matters more than youth
-    // Slightly compress the range (mid-tier players more valuable, top slightly less)
-    for (const [assetId, { value, position }] of base) {
-      const compressed = value > 70 ? value * 0.98 : value * 1.03;
-      redMap.set(assetId, clampRound(compressed));
-    }
-    return redMap;
-  }
-
-  // Build the 4 base sets
+  // DYN_1QB: from dynasty consensus rankings
   const dyn1qb = new Map<number, number>();
-  for (const [id, { value }] of baseValues) dyn1qb.set(id, value);
+  for (const [id, { value }] of dynBaseValues) dyn1qb.set(id, value);
   baseSetMap.set('DYN_1QB', dyn1qb);
 
-  const dynSF = computeSFValues(baseValues);
+  // DYN_SF: boost QBs from dynasty base
+  const dynSF = computeSFValues(dynBaseValues);
   baseSetMap.set('DYN_SF', dynSF);
 
-  const red1qb = computeRedraftValues(baseValues);
+  // RED_1QB: from redraft consensus rankings (independent source)
+  const red1qb = new Map<number, number>();
+  for (const [id, { value }] of redBaseValues) red1qb.set(id, value);
   baseSetMap.set('RED_1QB', red1qb);
 
-  const redSFBase = new Map<number, { value: number; position: Position }>();
-  for (const [id, { position }] of baseValues) {
-    redSFBase.set(id, { value: red1qb.get(id)!, position });
-  }
-  const redSF = computeSFValues(redSFBase);
+  // RED_SF: boost QBs from redraft base
+  const redSF = computeSFValues(redBaseValues);
   baseSetMap.set('RED_SF', redSF);
+
+  // baseValues used by expansion step (line 363) to look up position per asset
+  const baseValues = dynBaseValues;
 
   // Step 4: Expand 4 base sets → 24 league types
   console.log('\n[4/7] Expanding to 24 league types...');
