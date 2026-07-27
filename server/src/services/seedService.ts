@@ -73,8 +73,19 @@ function parseSleeperPlayers(raw: Record<string, any>): SleeperPlayer[] {
     const isNotable = (p.search_rank ?? 9999) < 500;
     if (!hasTeam && !isNotable) continue;
 
-    // Filter: remove players where Sleeper status is not "Active" (Inactive, IR, etc.)
-    if (!hasTeam && p.status && p.status.toLowerCase() !== 'active') continue;
+    // Filter: remove non-Active players (Inactive, IR, retired, etc.)
+    const statusLower = (p.status || 'active').toLowerCase();
+    if (statusLower !== 'active') continue;
+
+    // Filter: heuristically remove clearly retired players (no team + veteran)
+    // Sleeper sometimes marks retired players as "Active"
+    if (!hasTeam) {
+      const yearsExp = p.years_exp ?? 0;
+      const age = p.age ?? 0;
+      if (yearsExp >= 12) continue;
+      if (yearsExp >= 10 && age >= 33) continue;
+      if (yearsExp >= 8 && age >= 35) continue;
+    }
 
     players.push({
       player_id: p.player_id,
