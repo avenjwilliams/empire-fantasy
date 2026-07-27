@@ -60,6 +60,7 @@ COPY server/src/ server/src/
 COPY tsconfig.base.json ./
 COPY server/tsconfig.json server/
 COPY data/rankings/ data/rankings/
+COPY data/seed-rankings/ data/seed-rankings/
 
 ENV NODE_ENV=production
 ENV PORT=8080
