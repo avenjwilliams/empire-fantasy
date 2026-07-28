@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useLeagueType } from '../context/LeagueTypeContext.js';
 import AssetSearch from '../components/AssetSearch.js';
 import TradeScale from '../components/TradeScale.js';
-import { trueValue, getWeight } from '@empire-fantasy/shared';
+import { getWeight } from '@empire-fantasy/shared';
 
 interface SelectedAsset {
   asset_id: number;
@@ -20,6 +20,7 @@ interface TradeResult {
   verdict: string;
   differencePct: number;
   adviceGap: number | null;
+  valueAdjustment: number;
 }
 
 export default function Calculator() {
@@ -164,6 +165,11 @@ export default function Calculator() {
                 To even it, add a ~{result.adviceGap.toFixed(0)}-value player to the losing side
               </span>
             )}
+            {typeof result.valueAdjustment === 'number' && (
+              <span className="calc-result__hint">
+                Value adjustment: {result.valueAdjustment.toFixed(1)}
+              </span>
+            )}
           </div>
 
           <button
@@ -175,72 +181,70 @@ export default function Calculator() {
 
           {showMath && (
             <div className="math-panel">
-              <div className="math-panel__side">
-                <h3 className="math-panel__heading">Team 1 — {result.team1.sideValue.toLocaleString()}</h3>
-                <table className="math-table">
-                  <thead>
-                    <tr>
-                      <th>Player</th>
-                      <th>Value</th>
-                      <th>True Value</th>
-                      <th>Weight</th>
-                      <th>Weighted</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {result.team1.assets.map((a, i) => {
-                      const weighted = Math.round(a.trueValue * a.weight);
-                      return (
-                        <tr key={a.id}>
-                          <td>{a.name}</td>
-                          <td className="math-num">{a.value.toFixed(1)}</td>
-                          <td className="math-num">{a.trueValue.toLocaleString()}</td>
-                          <td className="math-num">{a.weight.toFixed(2)}</td>
-                          <td className="math-num">{weighted.toLocaleString()}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-
-              <div className="math-panel__side">
-                <h3 className="math-panel__heading">Team 2 — {result.team2.sideValue.toLocaleString()}</h3>
-                <table className="math-table">
-                  <thead>
-                    <tr>
-                      <th>Player</th>
-                      <th>Value</th>
-                      <th>True Value</th>
-                      <th>Weight</th>
-                      <th>Weighted</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {result.team2.assets.map((a, i) => {
-                      const weighted = Math.round(a.trueValue * a.weight);
-                      return (
-                        <tr key={a.id}>
-                          <td>{a.name}</td>
-                          <td className="math-num">{a.value.toFixed(1)}</td>
-                          <td className="math-num">{a.trueValue.toLocaleString()}</td>
-                          <td className="math-num">{a.weight.toFixed(2)}</td>
-                          <td className="math-num">{weighted.toLocaleString()}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-
               <div className="math-panel__summary">
                 <p>
                   <strong>Scale:</strong> {result.scale} ({result.verdict})
                 </p>
                 <p>
-                  <strong>Formula:</strong> value^2.6 / 100^2.6 × 10000, then depth-weighted
+                  <strong>Formula:</strong> linear depth-weighted sum (value × depthWeight)
                   (1.0, 0.9, 0.8, 0.65, 0.5, 0.4, 0.3…)
                 </p>
+              </div>
+
+              <div className="math-panel__sides">
+                <div className="math-panel__side">
+                  <h3 className="math-panel__heading">Team 1 — {result.team1.sideValue.toLocaleString()}</h3>
+                  <table className="math-table">
+                    <thead>
+                      <tr>
+                        <th>Player</th>
+                        <th>Value</th>
+                        <th>Weight</th>
+                        <th>Weighted</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {result.team1.assets.map((a, i) => {
+                        const weighted = Math.round(a.value * a.weight);
+                        return (
+                          <tr key={a.id}>
+                            <td>{a.name}</td>
+                            <td className="math-num">{a.value.toFixed(1)}</td>
+                            <td className="math-num">{a.weight.toFixed(2)}</td>
+                            <td className="math-num">{weighted.toLocaleString()}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="math-panel__side">
+                  <h3 className="math-panel__heading">Team 2 — {result.team2.sideValue.toLocaleString()}</h3>
+                  <table className="math-table">
+                    <thead>
+                      <tr>
+                        <th>Player</th>
+                        <th>Value</th>
+                        <th>Weight</th>
+                        <th>Weighted</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {result.team2.assets.map((a, i) => {
+                        const weighted = Math.round(a.value * a.weight);
+                        return (
+                          <tr key={a.id}>
+                            <td>{a.name}</td>
+                            <td className="math-num">{a.value.toFixed(1)}</td>
+                            <td className="math-num">{a.weight.toFixed(2)}</td>
+                            <td className="math-num">{weighted.toLocaleString()}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           )}

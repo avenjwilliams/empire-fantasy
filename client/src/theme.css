@@ -616,8 +616,35 @@ a:hover { text-decoration: underline; }
   border-top: 1px solid var(--border);
 }
 
-.math-panel__side {
+.math-panel__summary {
   margin-bottom: 1rem;
+  padding: 0.5rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 0.75rem;
+  color: var(--ink-muted);
+  text-align: center;
+}
+
+.math-panel__summary p {
+  margin-bottom: 0.25rem;
+}
+
+.math-panel__summary p:last-child {
+  margin-bottom: 0;
+}
+
+.math-panel__sides {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  align-items: center;
+}
+
+.math-panel__side {
+  width: 100%;
+  max-width: 500px;
 }
 
 .math-panel__heading {
@@ -628,16 +655,18 @@ a:hover { text-decoration: underline; }
   text-transform: uppercase;
   letter-spacing: 0.05em;
   margin-bottom: 0.4rem;
+  text-align: center;
 }
 
 .math-table {
   width: 100%;
   border-collapse: collapse;
   font-size: 0.75rem;
+  margin: 0 auto;
 }
 
 .math-table th {
-  text-align: left;
+  text-align: center;
   color: var(--ink-muted);
   font-weight: 600;
   text-transform: uppercase;
@@ -650,30 +679,17 @@ a:hover { text-decoration: underline; }
 .math-table td {
   padding: 0.25rem 0.5rem;
   border-bottom: 1px solid rgba(42,53,69,0.5);
+  text-align: center;
+}
+
+.math-table td:first-child {
+  text-align: left;
 }
 
 .math-num {
-  text-align: right;
+  text-align: center;
   font-family: var(--font-mono);
   font-weight: 600;
-}
-
-.math-panel__summary {
-  margin-top: 0.5rem;
-  padding: 0.5rem;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  font-size: 0.75rem;
-  color: var(--ink-muted);
-}
-
-.math-panel__summary p {
-  margin-bottom: 0.25rem;
-}
-
-.math-panel__summary p:last-child {
-  margin-bottom: 0;
 }
 
 @media (max-width: 768px) {

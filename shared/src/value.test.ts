@@ -43,20 +43,20 @@ describe('value.ts', () => {
   });
 
   describe('trueValue', () => {
-    it('maps 100 to 10000', () => {
-      expect(trueValue(100)).toBe(10000);
+    it('maps 100 to 100', () => {
+      expect(trueValue(100)).toBe(100);
     });
 
     it('maps 0 to 0', () => {
       expect(trueValue(0)).toBe(0);
     });
 
-    it('is convex (higher values disproportionately larger)', () => {
-      // v=80 should be much more than 80% of v=100
+    it('is linear (same as input)', () => {
+      // v=80 is exactly 80% of v=100
       const tv80 = trueValue(80);
       const tv100 = trueValue(100);
-      expect(tv80 / tv100).toBeLessThan(0.8);
-      expect(tv80 / tv100).toBeGreaterThan(0.4);
+      expect(tv80).toBe(80);
+      expect(tv80 / tv100).toBeCloseTo(0.8);
     });
 
     it('is monotonically increasing (invariant 5a)', () => {
@@ -68,11 +68,11 @@ describe('value.ts', () => {
       }
     });
 
-    it('matches expected approximate values from spec', () => {
-      expect(trueValue(80)).toBeCloseTo(5600, -2);
-      expect(trueValue(60)).toBeCloseTo(2650, -2);
-      expect(trueValue(40)).toBeCloseTo(925, -2);
-      expect(trueValue(20)).toBeCloseTo(152, -2);
+    it('matches expected values (linear identity)', () => {
+      expect(trueValue(80)).toBe(80);
+      expect(trueValue(60)).toBe(60);
+      expect(trueValue(40)).toBe(40);
+      expect(trueValue(20)).toBe(20);
     });
   });
 
@@ -138,8 +138,8 @@ describe('value.ts', () => {
       expect(result.verdict).toBe('Fair trade');
     });
 
-    // Invariant 2: One 95 vs three 55s → favors the 95 side
-    it('invariant 2: one 95 vs three 55s favors the 95 side', () => {
+    // Invariant 2: One 95 vs three 55s → in linear mode, three 55s weighted total > 95
+    it('invariant 2: one 95 vs three 55s favors the three 55s side in linear mode', () => {
       const result = evaluateTrade({
         leagueType: 'DYN_SF_PPR_TEP',
         team1: [{ id: 1, name: 'Star', value: 95.0 }],
@@ -149,12 +149,11 @@ describe('value.ts', () => {
           { id: 4, name: 'Mid C', value: 55.0 },
         ],
       });
-      // Team 2 is giving more total quantity but getting the star
-      // diff = side1 - side2. If side1 (star) > side2 (three 55s after weighting)
-      // then diff > 0 → scale > 0 → favors Team 2 (they get the star)
-      // "favors the 95 side" means the side RECEIVING the 95 wins
-      // Team 2 receives the 95 → scale > 0 (favors Team 2)
-      expect(result.scale).toBeGreaterThan(0);
+      // In linear mode with depth weighting:
+      // Team 1: 95 * 1.0 = 95
+      // Team 2: 55*1.0 + 55*0.9 + 55*0.8 = 55 + 49.5 + 44 = 148.5
+      // diff = 95 - 148.5 = -53.5 → scale = -66 (Team 1 gives less value, so Team 2 favored)
+      expect(result.scale).toBeLessThan(0);
     });
 
     // Invariant 3: Symmetric — swap sides, sign flips exactly

@@ -20,7 +20,6 @@ export const VOTE_CONSTANTS = {
 } as const;
 
 export const TRADE_CONSTANTS = {
-  EXP: 2.6,
   DEPTH_WEIGHTS: [1.0, 0.9, 0.8, 0.65, 0.5, 0.4, 0.3],
   DEPTH_FLOOR: 0.3,
   SCALE_MULTIPLIER: 300,
@@ -38,9 +37,9 @@ export function clampRound(v: number): number {
   return Math.round(clamped * 10) / 10;
 }
 
-/** Convert linear 1-100 value to nonlinear trade value. */
+/** Linear identity function - used as trueValue for compatibility with client UI. */
 export function trueValue(v: number): number {
-  return Math.pow(v / 100, TRADE_CONSTANTS.EXP) * 10000;
+  return Math.round(v);
 }
 
 /** Get depth weight for a given slot index (0-based). */
@@ -61,24 +60,24 @@ export function getVerdict(lean: number): Verdict {
 }
 
 /** Compute weighted side value from an array of asset values (already sorted desc). */
-function computeSideValue(trueValues: number[]): number {
+function computeSideValue(linearValues: number[]): number {
   let total = 0;
-  for (let i = 0; i < trueValues.length; i++) {
-    total += trueValues[i] * getWeight(i);
+  for (let i = 0; i < linearValues.length; i++) {
+    total += linearValues[i] * getWeight(i);
   }
   return total;
 }
 
 /**
- * Compute a value adjustment based on the difference between team side values.
- * Returns the absolute difference in linear value (1-100) that would be added to the winning side
- * to make the trade more balanced, without changing actual player values.
+ * Compute value adjustment based on total linear value difference.
+ * Returns the absolute difference in linear value (1-100) that would be added to the side
+ * with lower total value to make the trade more balanced.
  */
 function computeValueAdjustment(team1: { value: number }[], team2: { value: number }[]): number {
-  // Calculate side averages in linear space (1-100)
-  const avgValue1 = team1.reduce((sum, v) => sum + v.value, 0) / team1.length;
-  const avgValue2 = team2.reduce((sum, v) => sum + v.value, 0) / team2.length;
-  return Math.abs(avgValue2 - avgValue1);
+  // Calculate total linear value for each side
+  const sum1 = team1.reduce((sum, v) => sum + v.value, 0);
+  const sum2 = team2.reduce((sum, v) => sum + v.value, 0);
+  return Math.abs(sum2 - sum1);
 }
 
 /**
@@ -87,13 +86,10 @@ function computeValueAdjustment(team1: { value: number }[], team2: { value: numb
  */
 function computeAdviceGap(diff: number, losingAssetCount: number): number | null {
   const nextWeight = getWeight(losingAssetCount);
-  // We need trueValue(v) * nextWeight >= |diff|
-  const neededTrueValue = Math.abs(diff) / nextWeight;
-  // Invert: v = 100 * (neededTrueValue / 10000) ^ (1/EXP)
-  const ratio = neededTrueValue / 10000;
-  if (ratio > 1) return null; // No single player can close this gap
-  const v = 100 * Math.pow(ratio, 1 / TRADE_CONSTANTS.EXP);
-  return clampRound(v);
+  // For linear values, we need v * nextWeight >= |diff|
+  const neededValue = Math.abs(diff) / nextWeight;
+  if (neededValue > 100) return null; // No single player can close this gap
+  return clampRound(neededValue);
 }
 
 export interface EvaluateTradeInput {
@@ -110,21 +106,21 @@ export interface EvaluateTradeInput {
 export function evaluateTrade(input: EvaluateTradeInput): TradeResult {
   const { leagueType, team1, team2 } = input;
 
-  // Build trade assets sorted by trueValue descending
+  // Build trade assets sorted by linear value descending
   const buildSide = (assets: { id: number; name: string; value: number }[]): TradeSide => {
-    const withTrue = assets
-      .map(a => ({ ...a, trueValue: trueValue(a.value) }))
-      .sort((a, b) => b.trueValue - a.trueValue);
+    const sorted = assets
+      .slice()
+      .sort((a, b) => b.value - a.value);
 
-    const tradeAssets: TradeAsset[] = withTrue.map((a, i) => ({
+    const tradeAssets: TradeAsset[] = sorted.map((a, i) => ({
       id: a.id,
       name: a.name,
       value: a.value,
-      trueValue: Math.round(a.trueValue),
+      trueValue: Math.round(a.value), // Keep trueValue for compatibility with client UI
       weight: getWeight(i),
     }));
 
-    const sideValue = computeSideValue(withTrue.map(a => a.trueValue));
+    const sideValue = computeSideValue(sorted.map(a => a.value));
     return { assets: tradeAssets, sideValue: Math.round(sideValue) };
   };
 
@@ -145,25 +141,25 @@ export function evaluateTrade(input: EvaluateTradeInput): TradeResult {
   const differencePct = total > 0 ? Math.round(Math.abs(diff) / total * 1000) / 10 : 0;
 
    // Advice gap: which side is losing and how much to add
-  let adviceGap: number | null = null;
-  if (verdict !== 'Fair trade') {
-    const losingCount = diff > 0 ? team2.length : team1.length;
-    adviceGap = computeAdviceGap(diff, losingCount);
-  }
+   let adviceGap: number | null = null;
+   if (verdict !== 'Fair trade') {
+     const losingCount = diff > 0 ? team2.length : team1.length;
+     adviceGap = computeAdviceGap(diff, losingCount);
+   }
 
-  // Value adjustment: linear value difference applied to winning side
-  const valueAdjustment = computeValueAdjustment(team1, team2);
+   // Value adjustment: linear value difference applied to winning side
+   const valueAdjustment = computeValueAdjustment(team1, team2);
 
-  return {
-    leagueType,
-    team1: side1,
-    team2: side2,
-    scale,
-    verdict: verdictLabel,
-    differencePct,
-    adviceGap,
-    valueAdjustment,
-  };
+   return {
+     leagueType,
+     team1: side1,
+     team2: side2,
+     scale,
+     verdict: verdictLabel,
+     differencePct,
+     adviceGap,
+     valueAdjustment,
+   };
 }
 
 // =====================================================
