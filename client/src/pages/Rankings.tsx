@@ -29,25 +29,32 @@ export default function Rankings() {
   const tabs = format === 'DYN' ? [...POSITION_TABS, 'PICKS'] : POSITION_TABS;
 
   useEffect(() => {
-    setLoading(true);
-    const params = new URLSearchParams({ leagueType: code });
-    if (posFilter !== 'ALL') params.set('position', posFilter);
+    const handler = () => {
+      setLoading(true);
+      const params = new URLSearchParams({ leagueType: code });
+      if (posFilter !== 'ALL') params.set('position', posFilter);
 
-    fetch(`/api/rankings?${params}`)
-      .then(r => {
-        if (!r.ok) throw new Error('Failed to load rankings');
-        return r.json();
-      })
-      .then(data => {
-        setRows(data);
-        setLoading(false);
-        setError(null);
-      })
-      .catch(() => {
-        setRows([]);
-        setLoading(false);
-        setError('Failed to load rankings. Is the server running?');
-      });
+      fetch(`/api/rankings?${params}`)
+        .then(r => {
+          if (!r.ok) throw new Error('Failed to load rankings');
+          return r.json();
+        })
+        .then(data => {
+          setRows(data);
+          setLoading(false);
+          setError(null);
+        })
+        .catch(() => {
+          setRows([]);
+          setLoading(false);
+          setError('Failed to load rankings. Is the server running?');
+        });
+    };
+
+    handler();
+
+    window.addEventListener('empire-refresh', handler);
+    return () => window.removeEventListener('empire-refresh', handler);
   }, [code, posFilter]);
 
   const filtered = search

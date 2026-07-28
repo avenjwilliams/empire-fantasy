@@ -87,6 +87,7 @@ export default function KeepTradeCut() {
         return r.json();
       })
       .then(() => {
+        window.dispatchEvent(new CustomEvent('empire-refresh'));
         setFlash('Market updated');
         setTimeout(() => fetchPrompt(), 1200);
       })

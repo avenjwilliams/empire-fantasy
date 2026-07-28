@@ -31,31 +31,38 @@ export default function Log() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    setLoading(true);
-    const params = new URLSearchParams({
-      leagueType: code,
-      limit: String(PAGE_SIZE),
-      offset: String(offset),
-    });
-    if (reasonFilter !== 'all') params.set('reason', reasonFilter);
-
-    fetch(`/api/log?${params}`)
-      .then(r => {
-        if (!r.ok) throw new Error('Failed to load log');
-        return r.json();
-      })
-      .then(data => {
-        setRows(data.rows);
-        setTotal(data.total);
-        setLoading(false);
-        setError(null);
-      })
-      .catch(() => {
-        setRows([]);
-        setTotal(0);
-        setLoading(false);
-        setError('Failed to load adjustment log. Is the server running?');
+    const handler = () => {
+      setLoading(true);
+      const params = new URLSearchParams({
+        leagueType: code,
+        limit: String(PAGE_SIZE),
+        offset: String(offset),
       });
+      if (reasonFilter !== 'all') params.set('reason', reasonFilter);
+
+      fetch(`/api/log?${params}`)
+        .then(r => {
+          if (!r.ok) throw new Error('Failed to load log');
+          return r.json();
+        })
+        .then(data => {
+          setRows(data.rows);
+          setTotal(data.total);
+          setLoading(false);
+          setError(null);
+        })
+        .catch(() => {
+          setRows([]);
+          setTotal(0);
+          setLoading(false);
+          setError('Failed to load adjustment log. Is the server running?');
+        });
+    };
+
+    handler();
+
+    window.addEventListener('empire-refresh', handler);
+    return () => window.removeEventListener('empire-refresh', handler);
   }, [code, reasonFilter, offset]);
 
   // Reset offset on filter change
