@@ -22,6 +22,7 @@ permission:
     "scripts/snapshot-history.ts": allow
     "scripts/cleanup-retired.ts": allow
     "server/src/db/migrations/*": allow
+    "shared/src/value.test.ts": allow
     "docs/02-data-pipeline.md": allow
     "docs/03-scoring-adjustments.md": allow
   task:

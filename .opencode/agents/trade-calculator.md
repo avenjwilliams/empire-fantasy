@@ -8,6 +8,7 @@ permission:
     "*": deny
     "shared/src/value.ts": allow
     "server/src/routes/trade.ts": allow
+    "shared/src/value.test.ts": allow
     "docs/04-trade-calculator.md": allow
   task:
     "*": deny

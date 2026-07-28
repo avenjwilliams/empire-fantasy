@@ -61,7 +61,8 @@
       "WebFetch(domain:sports.yahoo.com)",
       "WebFetch(domain:fantraxhq.com)",
       "WebFetch(domain:www.si.com)",
-      "WebFetch(domain:www.espn.com)"
+      "WebFetch(domain:www.espn.com)",
+      "Bash(node -e \"JSON.parse\\(require\\('fs'\\).readFileSync\\('opencode.json','utf8'\\)\\); console.log\\('opencode.json: valid JSON'\\)\")"
     ]
   }
 }
