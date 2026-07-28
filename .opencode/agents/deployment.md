@@ -1,7 +1,7 @@
 ---
 name: deployment
 description: "Handles Fly.io operations — fly deploy, checking the ef_data volume and logs, and taking a backup via fly ssh console before any schema migration. Touches production and live user data. Never invoked automatically by any other agent — @mention only."
-model: opencode/nemotron-3-ultra-free
+model: opencode/deepseek-v4-flash-free
 mode: subagent
 permission:
   edit:

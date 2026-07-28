@@ -1,7 +1,7 @@
 ---
 name: rankings
 description: "Owns the living value system: KEEP/TRADE/CUT vote math (Elo pairwise), weekly stat/performance adjustments, adjustment_log writes, and seeding. This is the correctness-critical, stateful half of the app."
-model: opencode/nemotron-3-ultra-free
+model: opencode/deepseek-v4-flash-free
 mode: all
 permission:
   edit:
