@@ -138,28 +138,33 @@ export function evaluateTrade(input: EvaluateTradeInput): TradeResult {
     ? verdict
     : `${verdict} — Team ${diff > 0 ? '2' : '1'}`;
 
-  const differencePct = total > 0 ? Math.round(Math.abs(diff) / total * 1000) / 10 : 0;
+const differencePct = total > 0 ? Math.round(Math.abs(diff) / total * 1000) / 10 : 0;
 
    // Advice gap: which side is losing and how much to add
    let adviceGap: number | null = null;
+   let valueAdjustment: number | null = null;
+   let valueAdjustmentSide: 1 | 2 | null = null;
+
    if (verdict !== 'Fair trade') {
      const losingCount = diff > 0 ? team2.length : team1.length;
      adviceGap = computeAdviceGap(diff, losingCount);
+     valueAdjustment = adviceGap;
+     // Quality side: the one RECEIVING more value (the "winning" side)
+     // diff > 0 means Team 1 gives more → favors Team 2 → Team 2 is quality side
+     valueAdjustmentSide = diff > 0 ? 2 : 1;
    }
 
-   // Value adjustment: linear value difference applied to winning side
-   const valueAdjustment = computeValueAdjustment(team1, team2);
-
-   return {
-     leagueType,
-     team1: side1,
-     team2: side2,
-     scale,
-     verdict: verdictLabel,
-     differencePct,
-     adviceGap,
-     valueAdjustment,
-   };
+    return {
+      leagueType,
+      team1: side1,
+      team2: side2,
+      scale,
+      verdict: verdictLabel,
+      differencePct,
+      adviceGap,
+      valueAdjustment,
+      valueAdjustmentSide,
+    };
 }
 
 // =====================================================

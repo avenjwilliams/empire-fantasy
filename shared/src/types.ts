@@ -91,4 +91,6 @@ export interface TradeResult {
   verdict: string;
   differencePct: number;
   adviceGap: number | null;
+  valueAdjustment: number | null;
+  valueAdjustmentSide: 1 | 2 | null;
 }

@@ -20,7 +20,8 @@ interface TradeResult {
   verdict: string;
   differencePct: number;
   adviceGap: number | null;
-  valueAdjustment: number;
+  valueAdjustment: number | null;
+  valueAdjustmentSide: 1 | 2 | null;
 }
 
 export default function Calculator() {
@@ -165,9 +166,9 @@ export default function Calculator() {
                 To even it, add a ~{result.adviceGap.toFixed(0)}-value player to the losing side
               </span>
             )}
-            {typeof result.valueAdjustment === 'number' && (
+            {typeof result.valueAdjustment === 'number' && result.valueAdjustmentSide && (
               <span className="calc-result__hint">
-                Value adjustment: {result.valueAdjustment.toFixed(1)}
+                Value adjustment: +{result.valueAdjustment.toFixed(1)} to Team {result.valueAdjustmentSide}
               </span>
             )}
           </div>
