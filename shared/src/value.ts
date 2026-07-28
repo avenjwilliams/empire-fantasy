@@ -70,6 +70,18 @@ function computeSideValue(trueValues: number[]): number {
 }
 
 /**
+ * Compute a value adjustment based on the difference between team side values.
+ * Returns the absolute difference in linear value (1-100) that would be added to the winning side
+ * to make the trade more balanced, without changing actual player values.
+ */
+function computeValueAdjustment(team1: { value: number }[], team2: { value: number }[]): number {
+  // Calculate side averages in linear space (1-100)
+  const avgValue1 = team1.reduce((sum, v) => sum + v.value, 0) / team1.length;
+  const avgValue2 = team2.reduce((sum, v) => sum + v.value, 0) / team2.length;
+  return Math.abs(avgValue2 - avgValue1);
+}
+
+/**
  * Find the linear value (1-100) that would roughly even the trade
  * when added to the losing side at its next slot weight.
  */
@@ -132,12 +144,15 @@ export function evaluateTrade(input: EvaluateTradeInput): TradeResult {
 
   const differencePct = total > 0 ? Math.round(Math.abs(diff) / total * 1000) / 10 : 0;
 
-  // Advice gap: which side is losing and how much to add
+   // Advice gap: which side is losing and how much to add
   let adviceGap: number | null = null;
   if (verdict !== 'Fair trade') {
     const losingCount = diff > 0 ? team2.length : team1.length;
     adviceGap = computeAdviceGap(diff, losingCount);
   }
+
+  // Value adjustment: linear value difference applied to winning side
+  const valueAdjustment = computeValueAdjustment(team1, team2);
 
   return {
     leagueType,
@@ -147,6 +162,7 @@ export function evaluateTrade(input: EvaluateTradeInput): TradeResult {
     verdict: verdictLabel,
     differencePct,
     adviceGap,
+    valueAdjustment,
   };
 }
 
