@@ -1,0 +1,1 @@
+ALTER TABLE ktc_prompts ADD COLUMN skipped_at TEXT;

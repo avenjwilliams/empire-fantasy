@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { formatLeagueLabel } from '@empire-fantasy/shared';
 
 interface PromptAsset {
   asset_id: number;
@@ -16,6 +17,10 @@ interface Prompt {
 
 type Assignment = 'KEEP' | 'TRADE' | 'CUT' | null;
 const CYCLE: Assignment[] = [null, 'KEEP', 'TRADE', 'CUT'];
+// sessionStorage: clears when tab/browser closes, so popup returns on next visit.
+// localStorage would persist forever (old bug). In-component state only would re-show
+// on every page reload/navigation, which is too aggressive.
+const GATE_STORAGE: Storage = sessionStorage;
 const STORAGE_KEY = 'ef_ktc_seen';
 
 export default function KtcPopup() {
@@ -26,7 +31,8 @@ export default function KtcPopup() {
   const [flash, setFlash] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!localStorage.getItem(STORAGE_KEY)) {
+    // Idempotent read: sessionStorage is synchronous, no flash possible
+    if (!GATE_STORAGE.getItem(STORAGE_KEY)) {
       setVisible(true);
     }
   }, []);
@@ -52,7 +58,7 @@ export default function KtcPopup() {
   }, [visible, fetchPrompt]);
 
   const dismiss = () => {
-    localStorage.setItem(STORAGE_KEY, '1');
+    GATE_STORAGE.setItem(STORAGE_KEY, '1');
     setVisible(false);
   };
 
@@ -79,6 +85,20 @@ export default function KtcPopup() {
     && !assignments.has(null as any)
     && [...assignments.values()].every(v => v !== null);
 
+  const skip = () => {
+    if (!prompt) return;
+    // Mark this prompt skipped on the server so we get a fresh trio
+    fetch(`/api/ktc/skip`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ promptId: prompt.promptId }),
+    })
+      .then(r => { if (!r.ok) throw new Error('Skip failed'); return r.json(); })
+      .then(() => fetchPrompt())
+      .catch(() => setStatus('error'));
+  };
+
   const submit = () => {
     if (!prompt || !allAssigned) return;
     setStatus('submitting');
@@ -101,6 +121,8 @@ export default function KtcPopup() {
         return r.json();
       })
       .then(() => {
+        // Notify other tabs/pages (Log, Rankings) to refresh
+        window.dispatchEvent(new CustomEvent('empire-refresh'));
         setFlash('Market updated');
         setTimeout(() => dismiss(), 1200);
       })
@@ -133,7 +155,7 @@ export default function KtcPopup() {
 
         {prompt && status !== 'loading' && status !== 'capped' && status !== 'error' && (
           <>
-            <div className="ktc-league-badge">{prompt.leagueType}</div>
+            <div className="ktc-league-badge">Rating for: {formatLeagueLabel(prompt.leagueType)}</div>
 
             <div className="ktc-cards">
               {prompt.assets.map(asset => {
@@ -168,7 +190,7 @@ export default function KtcPopup() {
               </button>
               <button
                 className="ktc-btn"
-                onClick={dismiss}
+                onClick={skip}
                 disabled={status === 'submitting'}
               >
                 Skip

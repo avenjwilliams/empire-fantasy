@@ -29,6 +29,30 @@ export function parseCode(code: string): LeagueType | null {
   };
 }
 
+export function formatLeagueLabel(code: string): string {
+  const parsed = parseCode(code);
+  if (!parsed) return code; // fallback: render raw code if parse fails
+
+  const parts: string[] = [];
+
+  // format
+  parts.push(parsed.format === 'DYN' ? 'DYNASTY' : 'REDRAFT');
+
+  // rec (PPR/HALF/ZERO)
+  if (parsed.rec === 'PPR') parts.push('PPR');
+  else if (parsed.rec === 'HALF') parts.push('.5 PPR');
+  else if (parsed.rec === 'ZERO') parts.push('NON-PPR');
+
+  // qb
+  if (parsed.qb === 'SF') parts.push('SUPERFLEX');
+  else parts.push('1QB');
+
+  // tep (only if TEP)
+  if (parsed.tep === 'TEP') parts.push('TE PREMIUM');
+
+  return parts.join(', ');
+}
+
 export function generateAllLeagueTypes(): LeagueType[] {
   const types: LeagueType[] = [];
   for (const format of FORMATS) {

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useLeagueType } from '../context/LeagueTypeContext.js';
 import ValueChart from '../components/ValueChart.js';
+import { formatLeagueLabel } from '@empire-fantasy/shared';
 
 interface ValueEntry {
   leagueType: string;
@@ -95,7 +96,7 @@ export default function PlayerDetail() {
             className="value-card"
             style={v.leagueType === code ? { borderColor: 'var(--accent)' } : {}}
           >
-            <span className="value-card__code">{v.leagueType}</span>
+            <span className="value-card__code">{formatLeagueLabel(v.leagueType)}</span>
             <span className="value-card__value">{v.value.toFixed(1)}</span>
           </div>
         ))}
@@ -128,7 +129,7 @@ export default function PlayerDetail() {
                 <td className="text-muted" style={{ fontSize: '0.75rem' }}>
                   {log.created_at}
                 </td>
-                <td style={{ fontSize: '0.75rem' }}>{log.leagueType}</td>
+                <td style={{ fontSize: '0.75rem' }}>{formatLeagueLabel(log.leagueType)}</td>
                 <td>
                   <span className={`reason-chip reason-chip--${log.reason}`}>
                     {log.reason}

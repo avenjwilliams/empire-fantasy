@@ -11,10 +11,33 @@
 
 ### Prompt generation (`GET /api/ktc/prompt`)
 
-1. Pick a random league type (weight the common ones 2×: `DYN_SF_PPR_STD`, `DYN_1QB_PPR_STD`, `RED_1QB_HALF_STD`, `RED_1QB_PPR_STD`).
-2. Pick a random anchor asset with value in [20, 95] (avoid dead zone and untouchable zone). Players only in RED sets; players or picks in DYN sets, but never mix picks and players in one prompt (keeps the question clean).
-3. Pick two more assets of the **same kind** with values within ±6.0 of the anchor, excluding trios this session has seen. If fewer than 2 candidates, widen to ±10.0, then re-anchor.
-4. Persist the prompt; return assets in random display order with name/team/position/age but **not** their values (don't anchor the user).
+Two distinct paths, same response shape:
+
+| Surface | League type selection | Rationale |
+|---------|----------------------|-----------|
+| **/ktc page** (`KeepTradeCut.tsx`) | User's current header selection (`?leagueType=...`) | Deliberate navigation — the badge must match the selector. |
+| **On-open popup** (`KtcPopup.tsx`) | Weighted random (common codes 2×) — **no** query param | Fires before the user has touched anything. Tying it to the selector would funnel nearly all vote volume into the default `DYN_SF_PPR_STD`, leaving the other 23 codes parked at seed values forever. |
+
+**Shared logic (both paths):**
+
+1. Check daily vote count (max 20/session/day) — 429 if capped.
+2. Check for unanswered prompt:
+   - With `leagueType` param: reuse only if `league_type_id` matches **and** `answered_at IS NULL AND skipped_at IS NULL`.
+   - Without param: reuse most recent unanswered prompt regardless of type.
+3. Pick league type:
+   - With param: validate code via `parseCode()`, resolve to `league_types.id`, error 400 if unknown.
+   - Without param: weighted random from `WEIGHTED_CODES` (common codes 2×).
+4. For DYN types: 15% chance to use picks; RED types never use picks (hard rule 5).
+5. Pick anchor asset value ∈ [20, 95], same kind (players or picks).
+6. Find 2 candidates of same kind within ±6.0 (then ±10.0) of anchor, excluding trios seen this session.
+7. Persist prompt; return assets in random display order with name/team/position/age — **not** their values.
+
+### Skip / reroll (`POST /api/ktc/skip`)
+
+- Accepts `{ promptId }`, validates session ownership.
+- Stamps `ktc_prompts.skipped_at = now()`.
+- Unanswered-prompt query requires `answered_at IS NULL AND skipped_at IS NULL`, so next `GET /prompt` genuinely generates a fresh trio.
+- Client calls `/skip` then re-fetches.
 
 ### Vote application (`POST /api/ktc/vote`)
 
@@ -31,6 +54,11 @@ V_W += delta ; V_L -= delta
 - Max total movement per asset per vote ≈ 0.4 points (two pairwise wins/losses at K=0.20). An upset (crowd keeps the lower-valued player) moves more than a chalk result — exactly the Elo property we want.
 - Apply all three pairwise updates, clamp/round once at the end, write 3 `asset_values` updates + 3 log rows (`reason='vote'`, `detail={"promptId":...}`) in one transaction. Assets whose net delta rounds to 0.0 still get a log row (delta 0) — cheap and keeps the audit complete.
 - **Dampening**: per asset per league type, if the asset has received > 30 vote adjustments in the trailing 7 days, scale K by 0.5 (viral-player protection). Compute from `adjustment_log`.
+- `applyVote` derives its league type from the stored prompt row, so it needs no change once prompts carry the right type.
+
+### Robustness fix in `applyVote`
+
+`getValue()` now returns a clean 409/422 instead of throwing an unhandled 500 if an asset is missing an `asset_values` row for the prompt's league type.
 
 ## Performance (stat) adjustments
 

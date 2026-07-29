@@ -121,7 +121,8 @@ CREATE TABLE ktc_prompts (
   league_type_id INTEGER NOT NULL,
   asset_a INTEGER NOT NULL, asset_b INTEGER NOT NULL, asset_c INTEGER NOT NULL,
   created_at TEXT DEFAULT (datetime('now')),
-  answered_at TEXT
+  answered_at TEXT,
+  skipped_at TEXT                 -- nullable, set by POST /api/ktc/skip
 );
 
 CREATE TABLE ktc_votes (
@@ -152,9 +153,10 @@ GET  /api/rankings?leagueType=DYN_SF_PPR_TEP&position=RB   # sorted, with overal
 GET  /api/assets/search?q=jeff&leagueType=...              # calculator search (includes picks if DYN)
 GET  /api/assets/:id?leagueType=...                        # detail + history + recent log entries
 POST /api/trade/evaluate        { leagueType, team1: [assetIds], team2: [assetIds] }
-GET  /api/ktc/prompt            # creates/returns prompt for session (sets session cookie)
+GET  /api/ktc/prompt[?leagueType=CODE]                     # creates/returns prompt for session (sets session cookie)
 POST /api/ktc/vote              { promptId, keep, trade, cut }
-GET  /api/log?assetId=&leagueType=&limit=       # adjustment log browser
+POST /api/ktc/skip              { promptId }               # mark prompt skipped, next GET /prompt yields fresh trio
+GET  /api/log?assetId=&leagueType=&limit=                  # adjustment log browser
 ```
 
 Trade evaluation is **stateless** (no DB write) — it reads current values and computes.

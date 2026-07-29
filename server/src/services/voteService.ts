@@ -1,5 +1,6 @@
 import type Database from 'better-sqlite3';
 import { clampRound, computeVoteDeltas, VOTE_CONSTANTS } from '@empire-fantasy/shared';
+import { parseCode } from '@empire-fantasy/shared';
 
 /** League types that get 2x selection weight */
 const WEIGHTED_CODES = new Set([
@@ -32,6 +33,7 @@ interface PromptResponse {
 export function generatePrompt(
   db: Database.Database,
   sessionId: string,
+  leagueTypeCode?: string,
 ): PromptResponse | { error: string; code: number } {
   // Check daily vote count
   const today = new Date().toISOString().slice(0, 10);
@@ -45,31 +47,64 @@ export function generatePrompt(
     return { error: 'Daily vote limit reached', code: 429 };
   }
 
+  // If a league type was provided, resolve it
+  let forcedLeagueTypeId: number | null = null;
+  if (leagueTypeCode) {
+    const parsed = parseCode(leagueTypeCode);
+    if (!parsed) {
+      return { error: `Invalid league type: ${leagueTypeCode}`, code: 400 };
+    }
+    const ltRow = db.prepare('SELECT id FROM league_types WHERE code = ?').get(leagueTypeCode) as { id: number } | undefined;
+    if (!ltRow) {
+      return { error: `League type not found: ${leagueTypeCode}`, code: 400 };
+    }
+    forcedLeagueTypeId = ltRow.id;
+  }
+
   // Check for unanswered prompt
-  const unanswered = db.prepare(`
+  // With a leagueType param: only reuse if league_type_id matches
+  // Without param: reuse most recent regardless of type
+  let unansweredQuery = `
     SELECT p.id as promptId, lt.code as leagueType,
       p.asset_a, p.asset_b, p.asset_c
     FROM ktc_prompts p
     JOIN league_types lt ON lt.id = p.league_type_id
     WHERE p.session_id = ? AND p.answered_at IS NULL
-    ORDER BY p.created_at DESC LIMIT 1
-  `).get(sessionId) as any;
+  `;
+  const queryParams: (string | number)[] = [sessionId];
+
+  if (forcedLeagueTypeId !== null) {
+    unansweredQuery += ' AND p.league_type_id = ?';
+    queryParams.push(forcedLeagueTypeId);
+  }
+
+  unansweredQuery += ' ORDER BY p.created_at DESC LIMIT 1';
+
+  const unanswered = db.prepare(unansweredQuery).get(...queryParams) as any;
 
   if (unanswered) {
     return buildPromptResponse(db, unanswered.promptId, unanswered.leagueType,
       [unanswered.asset_a, unanswered.asset_b, unanswered.asset_c]);
   }
 
-  // Pick a weighted random league type
-  const allLts = db.prepare('SELECT id, code, format FROM league_types').all() as {
-    id: number; code: string; format: string;
-  }[];
-  const weighted: typeof allLts = [];
-  for (const lt of allLts) {
-    weighted.push(lt);
-    if (WEIGHTED_CODES.has(lt.code)) weighted.push(lt);
+  // Pick a league type
+  let lt: { id: number; code: string; format: string };
+  if (forcedLeagueTypeId !== null) {
+    lt = db.prepare('SELECT id, code, format FROM league_types WHERE id = ?')
+      .get(forcedLeagueTypeId) as { id: number; code: string; format: string };
+  } else {
+    // Weighted random selection (original behavior)
+    const allLts = db.prepare('SELECT id, code, format FROM league_types').all() as {
+      id: number; code: string; format: string;
+    }[];
+    const weighted: typeof allLts = [];
+    for (const l of allLts) {
+      weighted.push(l);
+      if (WEIGHTED_CODES.has(l.code)) weighted.push(l);
+    }
+    lt = weighted[Math.floor(Math.random() * weighted.length)];
   }
-  const lt = weighted[Math.floor(Math.random() * weighted.length)];
+
   const isDynasty = lt.format === 'DYN';
 
   // Get previously seen trios for this session
@@ -214,16 +249,20 @@ export function applyVote(
   const ltId = prompt.league_type_id;
   const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
 
-  // Get current values
-  const getValue = (assetId: number) => {
+  // Get current values with null guard (robustness fix)
+  const getValue = (assetId: number): number | null => {
     const row = db.prepare('SELECT value FROM asset_values WHERE asset_id = ? AND league_type_id = ?')
-      .get(assetId, ltId) as { value: number };
-    return row.value;
+      .get(assetId, ltId) as { value: number } | undefined;
+    return row?.value ?? null;
   };
 
   const keepValue = getValue(keepId);
   const tradeValue = getValue(tradeId);
   const cutValue = getValue(cutId);
+
+  if (keepValue === null || tradeValue === null || cutValue === null) {
+    return { success: false, error: 'One or more assets missing value for this league type', code: 422 };
+  }
 
   // Check dampening for each asset
   const getK = (assetId: number): number => {
@@ -279,5 +318,28 @@ export function applyVote(
   });
 
   applyAll();
+  return { success: true };
+}
+
+// ---- Skip Prompt ----
+
+export function skipPrompt(
+  db: Database.Database,
+  sessionId: string,
+  promptId: number,
+): { success: boolean; error?: string; code?: number } {
+  const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
+
+  const prompt = db.prepare(`
+    SELECT p.id, p.session_id, p.answered_at, p.skipped_at
+    FROM ktc_prompts p WHERE p.id = ?
+  `).get(promptId) as any;
+
+  if (!prompt) return { success: false, error: 'Prompt not found', code: 404 };
+  if (prompt.session_id !== sessionId) return { success: false, error: 'Prompt belongs to another session', code: 403 };
+  if (prompt.answered_at) return { success: false, error: 'Prompt already answered', code: 409 };
+  if (prompt.skipped_at) return { success: false, error: 'Prompt already skipped', code: 409 };
+
+  db.prepare('UPDATE ktc_prompts SET skipped_at = ? WHERE id = ?').run(now, promptId);
   return { success: true };
 }

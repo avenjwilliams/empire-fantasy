@@ -40,13 +40,14 @@ Persistent top bar: `EMPIRE FANTASY` wordmark left; tabs: **Calculator · Rankin
 
 ### 3. Keep / Trade / Cut (`/ktc`)
 
-- **First-visit popup**: on first visit (no `ef_ktc_seen` in localStorage), a modal overlay appears over whatever page the user landed on. Same KTC card UI as the full page. Dismissible (✕ or Skip); after voting or skipping, sets localStorage flag and never auto-shows again. The KTC tab remains for voluntary additional votes.
-- Prompt UI: league type shown as a small badge; three player cards (name, pos, team, age — **no values shown**). User taps to assign KEEP / TRADE / CUT (tap-cycle on mobile). Submit → subtle confirmation ("market updated"), auto-dismisses popup or loads next prompt. Skip button available.
+- **Per-session popup**: on every new browser/tab session (gate on `sessionStorage['ef_ktc_seen']`, not localStorage), a modal overlay appears over whatever page the user landed on. Same KTC card UI as the full page. Dismissible (✕ or Skip); after voting or skipping, sets sessionStorage flag and won't re-appear until the tab/browser is closed and reopened. The KTC tab remains for voluntary additional votes.
+- Prompt UI: league type shown as a human-readable badge using `formatLeagueLabel()` — e.g. "DYNASTY, PPR, SUPERFLEX" or "REDRAFT, .5 PPR, 1QB, TE PREMIUM". On the popup, prefix with **"Rating for: "** so it reads as a deliberate assignment rather than a bug. On the `/ktc` page, no prefix — the badge matches the selector exactly.
+- Three player cards (name, pos, team, age — **no values shown**). User taps to assign KEEP / TRADE / CUT (tap-cycle on mobile). Submit → subtle confirmation ("market updated"), auto-dismisses popup or loads next prompt. Skip button available.
 - Daily cap reached → friendly "market's closed for you today" message.
 
 ### 4. Log (`/log`)
 
-- Reverse-chron table of `adjustment_log`: time, asset, league type, reason chip (SEED/VOTE/STAT/MANUAL/DECAY), old → new, delta (colored ±). Filters: asset search, reason, league type. Paginated.
+- Reverse-chron table of `adjustment_log`: time, asset, league type (human-readable label), reason chip (SEED/VOTE/STAT/MANUAL/DECAY), old → new, delta (colored ±). Filters: asset search, reason, league type. Paginated.
 
 ## Components inventory
 

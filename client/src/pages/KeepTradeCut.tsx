@@ -1,4 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useLeagueType } from '../context/LeagueTypeContext.js';
+import { formatLeagueLabel } from '@empire-fantasy/shared';
 
 interface PromptAsset {
   asset_id: number;
@@ -18,6 +20,7 @@ type Assignment = 'KEEP' | 'TRADE' | 'CUT' | null;
 const CYCLE: Assignment[] = [null, 'KEEP', 'TRADE', 'CUT'];
 
 export default function KeepTradeCut() {
+  const { code } = useLeagueType();
   const [prompt, setPrompt] = useState<Prompt | null>(null);
   const [assignments, setAssignments] = useState<Map<number, Assignment>>(new Map());
   const [status, setStatus] = useState<'loading' | 'ready' | 'submitting' | 'capped' | 'error'>('loading');
@@ -27,7 +30,7 @@ export default function KeepTradeCut() {
     setStatus('loading');
     setAssignments(new Map());
     setFlash(null);
-    fetch('/api/ktc/prompt', { credentials: 'include' })
+    fetch(`/api/ktc/prompt?leagueType=${encodeURIComponent(code)}`, { credentials: 'include' })
       .then(r => {
         if (r.status === 429) { setStatus('capped'); return null; }
         if (!r.ok) throw new Error('Failed to load prompt');
@@ -37,7 +40,7 @@ export default function KeepTradeCut() {
         if (data) { setPrompt(data); setStatus('ready'); }
       })
       .catch(() => setStatus('error'));
-  }, []);
+  }, [code]);
 
   useEffect(() => { fetchPrompt(); }, [fetchPrompt]);
 
@@ -94,6 +97,19 @@ export default function KeepTradeCut() {
       .catch(() => setStatus('error'));
   };
 
+  const skip = () => {
+    if (!prompt) return;
+    fetch('/api/ktc/skip', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ promptId: prompt.promptId }),
+    })
+      .then(r => { if (!r.ok) throw new Error('Skip failed'); return r.json(); })
+      .then(() => fetchPrompt())
+      .catch(() => setStatus('error'));
+  };
+
   if (status === 'capped') {
     return (
       <div className="page">
@@ -127,7 +143,7 @@ export default function KeepTradeCut() {
         <p className="text-muted">Your picks tune the market. Tap each card to assign.</p>
       </div>
 
-      <div className="ktc-league-badge">{prompt.leagueType}</div>
+      <div className="ktc-league-badge">{formatLeagueLabel(prompt.leagueType)}</div>
 
       <div className="ktc-cards">
         {prompt.assets.map(asset => {
@@ -162,7 +178,7 @@ export default function KeepTradeCut() {
         </button>
         <button
           className="ktc-btn"
-          onClick={fetchPrompt}
+          onClick={skip}
           disabled={status === 'submitting'}
         >
           Skip

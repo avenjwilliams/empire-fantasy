@@ -803,13 +803,15 @@ a:hover { text-decoration: underline; }
   background: var(--bg-raised);
   border: 2px solid var(--border);
   border-radius: var(--radius);
-  padding: 0.2rem 0.5rem;
+  padding: 0.2rem 0.75rem;
   font-family: var(--font-mono);
   font-size: 0.7rem;
   font-weight: 700;
   color: var(--ink-muted);
   letter-spacing: 0.05em;
   margin-bottom: 1rem;
+  white-space: nowrap;
+  overflow: visible;
 }
 
 .ktc-cards {

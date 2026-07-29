@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildCode, parseCode, generateAllLeagueTypes, ALL_LEAGUE_TYPES } from './leagueTypes.js';
+import { buildCode, parseCode, generateAllLeagueTypes, ALL_LEAGUE_TYPES, formatLeagueLabel } from './leagueTypes.js';
 
 describe('leagueTypes', () => {
   describe('buildCode', () => {
@@ -36,6 +36,30 @@ describe('leagueTypes', () => {
       expect(parseCode('DYN_2QB_PPR_TEP')).toBeNull(); // invalid qb
       expect(parseCode('DYN_SF_FULL_TEP')).toBeNull(); // invalid rec
       expect(parseCode('DYN_SF_PPR_YES')).toBeNull(); // invalid tep
+    });
+  });
+
+  describe('formatLeagueLabel', () => {
+    it('formats DYN_SF_PPR_STD as "DYNASTY, PPR, SUPERFLEX"', () => {
+      expect(formatLeagueLabel('DYN_SF_PPR_STD')).toBe('DYNASTY, PPR, SUPERFLEX');
+    });
+
+    it('formats RED_1QB_HALF_TEP as "REDRAFT, .5 PPR, 1QB, TE PREMIUM"', () => {
+      expect(formatLeagueLabel('RED_1QB_HALF_TEP')).toBe('REDRAFT, .5 PPR, 1QB, TE PREMIUM');
+    });
+
+    it('formats DYN_1QB_ZERO_STD as "DYNASTY, NON-PPR, 1QB"', () => {
+      expect(formatLeagueLabel('DYN_1QB_ZERO_STD')).toBe('DYNASTY, NON-PPR, 1QB');
+    });
+
+    it('formats RED_SF_HALF_STD as "REDRAFT, .5 PPR, SUPERFLEX"', () => {
+      expect(formatLeagueLabel('RED_SF_HALF_STD')).toBe('REDRAFT, .5 PPR, SUPERFLEX');
+    });
+
+    it('returns raw code for invalid/unparseable codes (never throws, never undefined)', () => {
+      expect(formatLeagueLabel('INVALID')).toBe('INVALID');
+      expect(formatLeagueLabel('')).toBe('');
+      expect(formatLeagueLabel('DYN_SF_PPR')).toBe('DYN_SF_PPR');
     });
   });
 
