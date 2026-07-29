@@ -14,6 +14,7 @@ import {
   computeAgeNudge,
   computeExpectations,
   populationStddev,
+  round1,
 } from './value.js';
 
 describe('value.ts', () => {
@@ -263,6 +264,190 @@ describe('value.ts', () => {
         team2: [{ id: 2, name: 'B', value: 75.0 }],
       });
       expect(result.adviceGap).toBeNull();
+    });
+
+    // =====================================================
+    // New Value Adjustment tests
+    // =====================================================
+
+    it('equal piece counts => valueAdjustment is null on both sides', () => {
+      // 1-for-1: equal penalties (both 0)
+      const result1 = evaluateTrade({
+        leagueType: 'DYN_SF_PPR_TEP',
+        team1: [{ id: 1, name: 'A', value: 75.0 }],
+        team2: [{ id: 2, name: 'B', value: 75.0 }],
+      });
+      expect(result1.valueAdjustment).toBeNull();
+      expect(result1.valueAdjustmentSide).toBeNull();
+      expect(result1.team1.adjustment).toBe(0);
+      expect(result1.team2.adjustment).toBe(0);
+
+      // 2-for-2: equal penalties when values are identically distributed
+      const result2 = evaluateTrade({
+        leagueType: 'DYN_SF_PPR_TEP',
+        team1: [
+          { id: 1, name: 'A', value: 70.0 },
+          { id: 2, name: 'B', value: 60.0 },
+        ],
+        team2: [
+          { id: 3, name: 'C', value: 70.0 },
+          { id: 4, name: 'D', value: 60.0 },
+        ],
+      });
+      expect(result2.valueAdjustment).toBeNull();
+      expect(result2.valueAdjustmentSide).toBeNull();
+      expect(result2.team1.adjustment).toBe(0);
+      expect(result2.team2.adjustment).toBe(0);
+    });
+
+    it('1-for-2 => adjustment goes to the one-player side, equals depth-penalty shortfall', () => {
+      // Team 1: one 70-value player (penalty 0)
+      // Team 2: two players worth 40 each (penalty = 80 - (40 + 40*0.9) = 80 - 76 = 4)
+      const result = evaluateTrade({
+        leagueType: 'DYN_SF_PPR_TEP',
+        team1: [{ id: 1, name: 'Star', value: 70.0 }],
+        team2: [
+          { id: 2, name: 'Mid A', value: 40.0 },
+          { id: 3, name: 'Mid B', value: 40.0 },
+        ],
+      });
+
+      // Team 1 has smaller penalty (0), so gets the adjustment
+      expect(result.valueAdjustmentSide).toBe(1);
+      expect(result.valueAdjustment).toBe(4.0); // penalty diff = 4.0
+      expect(result.team1.adjustment).toBe(4.0);
+      expect(result.team2.adjustment).toBe(0);
+      
+      // Team 1 total = rawSum (70) + adjustment (4) = 74
+      // Team 2 total = rawSum (80) + 0 = 80
+      expect(result.team1.sideValue).toBe(74.0);
+      expect(result.team2.sideValue).toBe(80.0);
+    });
+
+    it('McMillan / Harrison + Stowers example => Fair trade with valueAdjustment ~2.4 to Team 1', () => {
+      // Team 1 receives: Tetairoa McMillan 73.7
+      // Team 2 receives: Marvin Harrison 51.8, Eli Stowers 23.7
+      const result = evaluateTrade({
+        leagueType: 'DYN_SF_PPR_TEP',
+        team1: [{ id: 1, name: 'Tetairoa McMillan', value: 73.7 }],
+        team2: [
+          { id: 2, name: 'Marvin Harrison Jr.', value: 51.8 },
+          { id: 3, name: 'Eli Stowers', value: 23.7 },
+        ],
+      });
+
+      // Team 1: rawSum 73.7, weighted 73.7, penalty 0.0
+      // Team 2: rawSum 75.5, weighted 51.8 + 23.7*0.9 = 73.13, penalty 2.37
+      // valueAdjustment = 2.37 → rounded to 2.4 to Team 1
+      expect(result.valueAdjustmentSide).toBe(1);
+      expect(result.valueAdjustment).toBeCloseTo(2.4, 1);
+      expect(result.team1.adjustment).toBeCloseTo(2.4, 1);
+      expect(result.team2.adjustment).toBe(0);
+
+      // Team 1 total = 73.7 + 2.4 = 76.1
+      // Team 2 total = 75.5
+      expect(result.team1.sideValue).toBe(76.1);
+      expect(result.team2.sideValue).toBe(75.5);
+
+      // diff = 0.6 → Fair trade (same as old weighted math: 73.7 vs 73.13)
+      expect(result.verdict).toBe('Fair trade');
+    });
+
+    it('adding a piece to either side changes the adjustment (not static)', () => {
+      const base = evaluateTrade({
+        leagueType: 'DYN_SF_PPR_TEP',
+        team1: [{ id: 1, name: 'A', value: 70.0 }],
+        team2: [
+          { id: 2, name: 'B', value: 40.0 },
+          { id: 3, name: 'C', value: 40.0 },
+        ],
+      });
+
+      // Add a small piece to Team 1
+      const withExtraOnTeam1 = evaluateTrade({
+        leagueType: 'DYN_SF_PPR_TEP',
+        team1: [
+          { id: 1, name: 'A', value: 70.0 },
+          { id: 4, name: 'D', value: 10.0 },
+        ],
+        team2: [
+          { id: 2, name: 'B', value: 40.0 },
+          { id: 3, name: 'C', value: 40.0 },
+        ],
+      });
+
+      // Add a small piece to Team 2
+      const withExtraOnTeam2 = evaluateTrade({
+        leagueType: 'DYN_SF_PPR_TEP',
+        team1: [{ id: 1, name: 'A', value: 70.0 }],
+        team2: [
+          { id: 2, name: 'B', value: 40.0 },
+          { id: 3, name: 'C', value: 40.0 },
+          { id: 4, name: 'D', value: 10.0 },
+        ],
+      });
+
+      expect(withExtraOnTeam1.valueAdjustment).not.toBe(base.valueAdjustment);
+      expect(withExtraOnTeam2.valueAdjustment).not.toBe(base.valueAdjustment);
+    });
+
+    it('adjusted totals produce identical verdict as old weighted-sum math (regression guard)', () => {
+      // Test a variety of trade shapes to ensure the refactor preserves verdicts.
+      // Note: old math used Math.round() (integer sideValues), new math uses round1() (1 decimal).
+      // The exact scale may differ by ±1 due to different total (rawSum vs weightedSum for non-credit side),
+      // but the VERDICT band must be identical. If any verdict changes, there's a bug.
+      const fixtures = [
+        // 1-for-1
+        { team1: [{ value: 80 }], team2: [{ value: 78 }] },
+        // 1-for-2
+        { team1: [{ value: 90 }], team2: [{ value: 50 }, { value: 45 }] },
+        // 2-for-2
+        { team1: [{ value: 75 }, { value: 65 }], team2: [{ value: 70 }, { value: 70 }] },
+        // 1-for-3
+        { team1: [{ value: 95 }], team2: [{ value: 55 }, { value: 55 }, { value: 55 }] },
+        // 2-for-3
+        { team1: [{ value: 85 }, { value: 75 }], team2: [{ value: 60 }, { value: 60 }, { value: 50 }] },
+        // 3-for-3
+        { team1: [{ value: 70 }, { value: 65 }, { value: 60 }], team2: [{ value: 68 }, { value: 63 }, { value: 58 }] },
+        // Unbalanced: 1-for-4
+        { team1: [{ value: 90 }], team2: [{ value: 40 }, { value: 35 }, { value: 30 }, { value: 25 }] },
+      ];
+
+      for (const fixture of fixtures) {
+        const team1Assets = fixture.team1.map((v, i) => ({ id: i + 1, name: `T1-${i}`, value: v.value }));
+        const team2Assets = fixture.team2.map((v, i) => ({ id: i + 100, name: `T2-${i}`, value: v.value }));
+
+        const result = evaluateTrade({
+          leagueType: 'DYN_SF_PPR_TEP',
+          team1: team1Assets,
+          team2: team2Assets,
+        });
+
+        // Manually compute old-style weighted sums with Math.round (integer) as original code did
+        const computeOldSideValue = (values: number[]) => {
+          const sorted = [...values].sort((a, b) => b - a);
+          let total = 0;
+          for (let i = 0; i < sorted.length; i++) {
+            const w = i < TRADE_CONSTANTS.DEPTH_WEIGHTS.length ? TRADE_CONSTANTS.DEPTH_WEIGHTS[i] : TRADE_CONSTANTS.DEPTH_FLOOR;
+            total += sorted[i] * w;
+          }
+          return Math.round(total); // Original code used Math.round (integer)
+        };
+
+        const oldSide1 = computeOldSideValue(fixture.team1.map(v => v.value));
+        const oldSide2 = computeOldSideValue(fixture.team2.map(v => v.value));
+        const oldDiff = oldSide1 - oldSide2;
+        const oldTotal = oldSide1 + oldSide2;
+        const oldLean = oldDiff / Math.max(oldTotal, 1);
+        const oldVerdict = oldLean === 0 ? 'Fair trade' :
+          Math.abs(oldLean) < 0.03 ? 'Fair trade' :
+          Math.abs(oldLean) < 0.08 ? 'Slight edge' :
+          Math.abs(oldLean) < 0.18 ? 'Clear win' : 'Landslide';
+
+        // New math must produce identical VERDICT
+        const newVerdictBase = result.verdict.split(' — ')[0]; // Remove " — Team X" suffix
+        expect(newVerdictBase).toBe(oldVerdict);
+      }
     });
   });
 

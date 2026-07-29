@@ -911,6 +911,128 @@ a:hover { text-decoration: underline; }
   margin-bottom: 0.5rem;
 }
 
+/* ---- Calculator Adjustment ---- */
+.calc-team__adjustment {
+  margin-top: 0.75rem;
+  padding-top: 0.5rem;
+  border-top: 1px dashed var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.adjustment-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0.5rem;
+  background: repeating-linear-gradient(
+    45deg,
+    var(--bg-raised),
+    var(--bg-raised) 4px,
+    var(--border) 4px,
+    var(--border) 6px
+  );
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 0.8rem;
+  font-family: var(--font-mono);
+}
+
+.adjustment-chip__label {
+  color: var(--ink-muted);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 0.65rem;
+}
+
+.adjustment-chip__value {
+  color: var(--accent);
+  font-weight: 700;
+  font-size: 0.85rem;
+}
+
+.adjustment-disclosure {
+  background: none;
+  border: none;
+  color: var(--ink-muted);
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  padding: 0;
+  text-align: left;
+  transition: color 0.15s;
+  position: relative;
+}
+.adjustment-disclosure:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+.adjustment-disclosure__panel {
+  margin-top: 0.5rem;
+  padding: 0.75rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: var(--ink-muted);
+  animation: fadeIn 0.2s ease-out;
+}
+
+.adjustment-disclosure__panel p {
+  margin-bottom: 0.5rem;
+}
+.adjustment-disclosure__panel p:last-child {
+  margin-bottom: 0;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.calc-team__summary {
+  margin-top: 0.75rem;
+  padding: 0.5rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 0.7rem;
+  color: var(--ink-muted);
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* ---- Math Panel Breakdown ---- */
+.math-panel__breakdown {
+  margin-top: 0.5rem;
+  padding: 0.5rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 0.7rem;
+  color: var(--ink-muted);
+  font-family: var(--font-mono);
+  text-align: left;
+}
+
+.math-panel__breakdown p {
+  margin-bottom: 0.2rem;
+}
+.math-panel__breakdown p:last-child {
+  margin-bottom: 0;
+}
+
+.math-panel__breakdown strong {
+  color: var(--ink);
+}
+
 /* ---- Responsive ---- */
 
 /* Tablet */

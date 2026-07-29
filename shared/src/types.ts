@@ -73,6 +73,8 @@ export interface TradeAsset {
 export interface TradeSide {
   assets: TradeAsset[];
   sideValue: number;
+  rawSum: number;
+  adjustment: number;
 }
 
 export interface TradeInput {
@@ -91,6 +93,10 @@ export interface TradeResult {
   verdict: string;
   differencePct: number;
   adviceGap: number | null;
+  /** Roster-spot credit: absolute difference in depth penalties between sides.
+   *  Added to the side with the SMALLER depth penalty (fewer/more concentrated pieces).
+   *  Reported whenever depth penalties differ, including on Fair trades. */
   valueAdjustment: number | null;
+  /** Side receiving the valueAdjustment (1 or 2), or null if zero. */
   valueAdjustmentSide: 1 | 2 | null;
 }

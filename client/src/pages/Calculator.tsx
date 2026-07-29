@@ -12,10 +12,25 @@ interface SelectedAsset {
   value: number;
 }
 
+interface TradeAsset {
+  id: number;
+  name: string;
+  value: number;
+  trueValue: number;
+  weight: number;
+}
+
+interface TradeSide {
+  assets: TradeAsset[];
+  sideValue: number;
+  rawSum: number;
+  adjustment: number;
+}
+
 interface TradeResult {
   leagueType: string;
-  team1: { assets: any[]; sideValue: number };
-  team2: { assets: any[]; sideValue: number };
+  team1: TradeSide;
+  team2: TradeSide;
   scale: number;
   verdict: string;
   differencePct: number;
@@ -95,7 +110,7 @@ export default function Calculator() {
           <div className="calc-team__header">
             <span className="calc-team__title">Team 1</span>
             {result && (
-              <span className="calc-team__total">{result.team1.sideValue.toLocaleString()}</span>
+              <span className="calc-team__total">{result.team1.sideValue.toFixed(1)}</span>
             )}
           </div>
           <AssetSearch onSelect={addToTeam(1)} excludeIds={allIds} />
@@ -119,6 +134,41 @@ export default function Calculator() {
               </p>
             )}
           </div>
+          
+          {/* Value Adjustment row for Team 1 */}
+          {result && result.team1.adjustment > 0 && (
+            <div className="calc-team__adjustment">
+              <span className="adjustment-chip">
+                <span className="adjustment-chip__label">Value Adjustment</span>
+                <span className="adjustment-chip__value">+{result.team1.adjustment.toFixed(1)}</span>
+              </span>
+              <button className="adjustment-disclosure" onClick={(e) => { e.stopPropagation(); setShowMath(true); }}>
+                More on value adjustment
+              </button>
+              <div className="adjustment-disclosure__panel">
+                <p>
+                  Trading is more than simple addition. We add value to the side of the trade that's giving up 
+                  more when you look at roster spots, players' "stud" factor, and so on. This counters trade math 
+                  that says twelve third-round picks are a fair deal for one elite player.
+                </p>
+                <p>
+                  The adjustment is reverse-engineered from what the lighter side would need added to even the trade, 
+                  which is why it updates as players are added to either side.
+                </p>
+              </div>
+            </div>
+          )}
+          
+          {/* Piece count summary for Team 1 */}
+          {result && team1.length > 0 && (
+            <div className="calc-team__summary">
+              {team1.length} Total Piece{team1.length !== 1 ? 's' : ''} / 
+              {team1.filter(a => a.position === 'QB').length} QB, 
+              {team1.filter(a => a.position === 'RB').length} RB, 
+              {team1.filter(a => a.position === 'WR').length} WR, 
+              {team1.filter(a => a.position === 'TE').length} TE
+            </div>
+          )}
         </div>
 
         {/* Team 2 */}
@@ -126,7 +176,7 @@ export default function Calculator() {
           <div className="calc-team__header">
             <span className="calc-team__title">Team 2</span>
             {result && (
-              <span className="calc-team__total">{result.team2.sideValue.toLocaleString()}</span>
+              <span className="calc-team__total">{result.team2.sideValue.toFixed(1)}</span>
             )}
           </div>
           <AssetSearch onSelect={addToTeam(2)} excludeIds={allIds} />
@@ -150,6 +200,41 @@ export default function Calculator() {
               </p>
             )}
           </div>
+
+          {/* Value Adjustment row for Team 2 */}
+          {result && result.team2.adjustment > 0 && (
+            <div className="calc-team__adjustment">
+              <span className="adjustment-chip">
+                <span className="adjustment-chip__label">Value Adjustment</span>
+                <span className="adjustment-chip__value">+{result.team2.adjustment.toFixed(1)}</span>
+              </span>
+              <button className="adjustment-disclosure" onClick={(e) => { e.stopPropagation(); setShowMath(true); }}>
+                More on value adjustment
+              </button>
+              <div className="adjustment-disclosure__panel">
+                <p>
+                  Trading is more than simple addition. We add value to the side of the trade that's giving up 
+                  more when you look at roster spots, players' "stud" factor, and so on. This counters trade math 
+                  that says twelve third-round picks are a fair deal for one elite player.
+                </p>
+                <p>
+                  The adjustment is reverse-engineered from what the lighter side would need added to even the trade, 
+                  which is why it updates as players are added to either side.
+                </p>
+              </div>
+            </div>
+          )}
+          
+          {/* Piece count summary for Team 2 */}
+          {result && team2.length > 0 && (
+            <div className="calc-team__summary">
+              {team2.length} Total Piece{team2.length !== 1 ? 's' : ''} / 
+              {team2.filter(a => a.position === 'QB').length} QB, 
+              {team2.filter(a => a.position === 'RB').length} RB, 
+              {team2.filter(a => a.position === 'WR').length} WR, 
+              {team2.filter(a => a.position === 'TE').length} TE
+            </div>
+          )}
         </div>
       </div>
 
@@ -164,11 +249,6 @@ export default function Calculator() {
             {result.adviceGap && (
               <span className="calc-result__hint">
                 To even it, add a ~{result.adviceGap.toFixed(0)}-value player to the losing side
-              </span>
-            )}
-            {typeof result.valueAdjustment === 'number' && result.valueAdjustmentSide && (
-              <span className="calc-result__hint">
-                Value adjustment: +{result.valueAdjustment.toFixed(1)} to Team {result.valueAdjustmentSide}
               </span>
             )}
           </div>
@@ -187,14 +267,16 @@ export default function Calculator() {
                   <strong>Scale:</strong> {result.scale} ({result.verdict})
                 </p>
                 <p>
-                  <strong>Formula:</strong> linear depth-weighted sum (value × depthWeight)
-                  (1.0, 0.9, 0.8, 0.65, 0.5, 0.4, 0.3…)
+                  <strong>Formula:</strong> raw sum + value adjustment (roster-spot credit). 
+                  Each side's raw sum = Σ player values. Depth penalty = raw sum − depth-weighted sum. 
+                  Value adjustment = |penalty₁ − penalty₂|, added to the side with the SMALLER penalty 
+                  (fewer/more concentrated pieces). Equal piece counts ⇒ zero adjustment.
                 </p>
               </div>
 
               <div className="math-panel__sides">
                 <div className="math-panel__side">
-                  <h3 className="math-panel__heading">Team 1 — {result.team1.sideValue.toLocaleString()}</h3>
+                  <h3 className="math-panel__heading">Team 1 — {result.team1.sideValue.toFixed(1)}</h3>
                   <table className="math-table">
                     <thead>
                       <tr>
@@ -218,10 +300,16 @@ export default function Calculator() {
                       })}
                     </tbody>
                   </table>
+                  <div className="math-panel__breakdown">
+                    <p><strong>Raw sum:</strong> {result.team1.rawSum.toFixed(1)}</p>
+                    <p><strong>Depth penalty:</strong> {(result.team1.rawSum - result.team1.assets.reduce((sum, a, i) => sum + a.value * a.weight, 0)).toFixed(1)}</p>
+                    <p><strong>Adjustment:</strong> {result.team1.adjustment.toFixed(1)}</p>
+                    <p><strong>Total:</strong> {result.team1.sideValue.toFixed(1)}</p>
+                  </div>
                 </div>
 
                 <div className="math-panel__side">
-                  <h3 className="math-panel__heading">Team 2 — {result.team2.sideValue.toLocaleString()}</h3>
+                  <h3 className="math-panel__heading">Team 2 — {result.team2.sideValue.toFixed(1)}</h3>
                   <table className="math-table">
                     <thead>
                       <tr>
@@ -245,6 +333,12 @@ export default function Calculator() {
                       })}
                     </tbody>
                   </table>
+                  <div className="math-panel__breakdown">
+                    <p><strong>Raw sum:</strong> {result.team2.rawSum.toFixed(1)}</p>
+                    <p><strong>Depth penalty:</strong> {(result.team2.rawSum - result.team2.assets.reduce((sum, a, i) => sum + a.value * a.weight, 0)).toFixed(1)}</p>
+                    <p><strong>Adjustment:</strong> {result.team2.adjustment.toFixed(1)}</p>
+                    <p><strong>Total:</strong> {result.team2.sideValue.toFixed(1)}</p>
+                  </div>
                 </div>
               </div>
             </div>

@@ -20,8 +20,15 @@ Persistent top bar: `EMPIRE FANTASY` wordmark left; tabs: **Calculator · Rankin
 ### 1. Trade Calculator (`/`)
 
 - Two columns: TEAM 1 / TEAM 2. Each has an asset search (typeahead: name, shows pos·team·age·value) and a stacked list of added assets with per-asset value and remove ✕. Picks appear in search only for DYN league types.
+- **Under each team's player chips**: Value Adjustment row (only on the side receiving it). Styled as a chip but visually distinct — muted/hatched background, no position badge, no remove button — showing `+X.X`. Only rendered on the side that receives the credit.
+- **Piece-count summary line** per side (matching KTC): `2 Total Pieces / 1 WR, 1 TE` (or appropriate positions).
+- **Below the Value Adjustment row on the credit-receiving side**: small link/disclosure: **"More on value adjustment"**. Expanded, it reads:
+  > Trading is more than simple addition. We add value to the side of the trade that's giving up more when you look at roster spots, players' "stud" factor, and so on. This counters trade math that says twelve third-round picks are a fair deal for one elite player.
+  >
+  > The adjustment is reverse-engineered from what the lighter side would need added to even the trade, which is why it updates as players are added to either side.
+- **Team header total** must equal chips + adjustment. This is the whole point; if it doesn't add up, the feature has failed.
 - Below: horizontal **trade scale** — a meter from TEAM 1 ←→ TEAM 2 with a needle at `scale` (−100..+100), verdict text ("FAIR TRADE", "CLEAR WIN — TEAM 1"), each side's total, and the "add a ~X-value player to even it" hint.
-- Expandable **"Show the math"** panel: per-asset breakdown (linear value → curved trueValue → slot weight → weighted contribution), side totals, and formula explanation. Toggled via dashed-border button below the verdict.
+- Expandable **"Show the math"** panel: per-asset breakdown (linear value → curved trueValue → slot weight → weighted contribution), **plus new per-side breakdown showing rawSum, depthPenalty, and adjustment**, and formula caption updated from "linear depth-weighted sum" to describe the credit framing. Toggled via dashed-border button below the verdict.
 - Evaluation auto-runs on every change (debounced); no submit button.
 
 ### 2. Rankings (`/rankings`)

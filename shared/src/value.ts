@@ -37,6 +37,11 @@ export function clampRound(v: number): number {
   return Math.round(clamped * 10) / 10;
 }
 
+/** Round to one decimal place without clamping (for side totals, adjustments). */
+export function round1(v: number): number {
+  return Math.round(v * 10) / 10;
+}
+
 /** Linear identity function - used as trueValue for compatibility with client UI. */
 export function trueValue(v: number): number {
   return Math.round(v);
@@ -68,16 +73,38 @@ function computeSideValue(linearValues: number[]): number {
   return total;
 }
 
+/** Compute raw sum, weighted sum, and depth penalty for a sorted array of values. */
+function computeSideBreakdown(linearValues: number[]): { rawSum: number; weightedSum: number; depthPenalty: number } {
+  const rawSum = linearValues.reduce((sum, v) => sum + v, 0);
+  const weightedSum = computeSideValue(linearValues);
+  const depthPenalty = rawSum - weightedSum; // ≥ 0
+  return { rawSum, weightedSum, depthPenalty };
+}
+
 /**
- * Compute value adjustment based on total linear value difference.
- * Returns the absolute difference in linear value (1-100) that would be added to the side
- * with lower total value to make the trade more balanced.
+ * Compute value adjustment based on depth penalty difference.
+ * The side with the SMALLER depth penalty (fewer/more concentrated pieces) gets the credit.
+ * Returns { adjustment: number, adjustmentSide: 1 | 2 | null }
+ * adjustment is rounded to 1 decimal, clamped to [0, 100].
  */
-function computeValueAdjustment(team1: { value: number }[], team2: { value: number }[]): number {
-  // Calculate total linear value for each side
-  const sum1 = team1.reduce((sum, v) => sum + v.value, 0);
-  const sum2 = team2.reduce((sum, v) => sum + v.value, 0);
-  return Math.abs(sum2 - sum1);
+function computeValueAdjustment(
+  team1Values: number[],
+  team2Values: number[]
+): { adjustment: number | null; adjustmentSide: 1 | 2 | null } {
+  const breakdown1 = computeSideBreakdown(team1Values);
+  const breakdown2 = computeSideBreakdown(team2Values);
+
+  const penaltyDiff = Math.abs(breakdown1.depthPenalty - breakdown2.depthPenalty);
+  
+  if (penaltyDiff === 0) {
+    return { adjustment: null, adjustmentSide: null };
+  }
+
+  // Side with SMALLER penalty gets the credit
+  const adjustmentSide = breakdown1.depthPenalty < breakdown2.depthPenalty ? 1 : 2;
+  const adjustment = clampRound(penaltyDiff);
+
+  return { adjustment, adjustmentSide };
 }
 
 /**
@@ -120,13 +147,39 @@ export function evaluateTrade(input: EvaluateTradeInput): TradeResult {
       weight: getWeight(i),
     }));
 
-    const sideValue = computeSideValue(sorted.map(a => a.value));
-    return { assets: tradeAssets, sideValue: Math.round(sideValue) };
+    const values = sorted.map(a => a.value);
+    const breakdown = computeSideBreakdown(values);
+    
+    // sideValue = rawSum initially; adjustment added later to the credit-receiving side
+    // The non-credit side keeps rawSum as its total (not weightedSum)
+    return { 
+      assets: tradeAssets, 
+      sideValue: round1(breakdown.rawSum),
+      rawSum: round1(breakdown.rawSum),
+      adjustment: 0, // Will be set after adjustment computed
+    };
   };
 
   const side1 = buildSide(team1);
   const side2 = buildSide(team2);
 
+  // Compute value adjustment from depth penalties
+  const team1Values = team1.map(a => a.value).sort((a, b) => b - a);
+  const team2Values = team2.map(a => a.value).sort((a, b) => b - a);
+  const { adjustment, adjustmentSide } = computeValueAdjustment(team1Values, team2Values);
+
+  // Apply adjustment to the appropriate side
+  if (adjustment !== null && adjustmentSide !== null) {
+    if (adjustmentSide === 1) {
+      side1.adjustment = adjustment;
+      side1.sideValue = round1(side1.rawSum + adjustment);
+    } else {
+      side2.adjustment = adjustment;
+      side2.sideValue = round1(side2.rawSum + adjustment);
+    }
+  }
+
+  // Compute diff from adjusted sideValues
   const diff = side1.sideValue - side2.sideValue;
   const total = side1.sideValue + side2.sideValue;
   const lean = diff / Math.max(total, 1);
@@ -138,33 +191,30 @@ export function evaluateTrade(input: EvaluateTradeInput): TradeResult {
     ? verdict
     : `${verdict} — Team ${diff > 0 ? '2' : '1'}`;
 
-const differencePct = total > 0 ? Math.round(Math.abs(diff) / total * 1000) / 10 : 0;
+  const differencePct = total > 0 ? Math.round(Math.abs(diff) / total * 1000) / 10 : 0;
 
-   // Advice gap: which side is losing and how much to add
-   let adviceGap: number | null = null;
-   let valueAdjustment: number | null = null;
-   let valueAdjustmentSide: 1 | 2 | null = null;
+  // Advice gap: which side is losing and how much to add
+  let adviceGap: number | null = null;
+  if (verdict !== 'Fair trade') {
+    const losingCount = diff > 0 ? team2.length : team1.length;
+    adviceGap = computeAdviceGap(diff, losingCount);
+  }
 
-   if (verdict !== 'Fair trade') {
-     const losingCount = diff > 0 ? team2.length : team1.length;
-     adviceGap = computeAdviceGap(diff, losingCount);
-     valueAdjustment = adviceGap;
-     // Quality side: the one RECEIVING more value (the "winning" side)
-     // diff > 0 means Team 1 gives more → favors Team 2 → Team 2 is quality side
-     valueAdjustmentSide = diff > 0 ? 2 : 1;
-   }
+  // valueAdjustment: the roster-spot credit (adjustment), reported whenever penalties differ
+  const valueAdjustment = adjustment;
+  const valueAdjustmentSide = adjustmentSide;
 
-    return {
-      leagueType,
-      team1: side1,
-      team2: side2,
-      scale,
-      verdict: verdictLabel,
-      differencePct,
-      adviceGap,
-      valueAdjustment,
-      valueAdjustmentSide,
-    };
+  return {
+    leagueType,
+    team1: side1,
+    team2: side2,
+    scale,
+    verdict: verdictLabel,
+    differencePct,
+    adviceGap,
+    valueAdjustment,
+    valueAdjustmentSide,
+  };
 }
 
 // =====================================================
