@@ -4,15 +4,22 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import {
   clampRound,
+  rankToValue,
   RANK_DECAY_K,
   SCORING_MULTIPLIERS,
-  PICK_VALUES,
-  PICK_YEAR_DECAY,
-  PICK_SF_FIRST_ROUND_MULTIPLIER,
-  PICK_YEARS,
 } from '@empire-fantasy/shared';
-import type { Position, Format, QBSetting, PickTier } from '@empire-fantasy/shared';
+import type { Position, LeagueType } from '@empire-fantasy/shared';
 import { initDb, closeDb } from '../server/src/db/db.js';
+import {
+  loadSleeperPlayers,
+  loadSeedRankingsCSV,
+  recoverSeedRanks,
+  applyScoringMultipliers,
+  SeedConfig,
+  SeedRankingRow,
+  Position,
+  LeagueType,
+} from '../server/src/services/seedService.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '..');
@@ -36,209 +43,11 @@ interface SeedRankingRow {
   team: string;
 }
 
-interface SeedConfig {
-  fixturesMode: boolean;
-  dataDir: string;
-}
-
-const VALID_POSITIONS: Position[] = ['QB', 'RB', 'WR', 'TE'];
-const CSV_SETS = ['DYN_1QB', 'RED_1QB', 'DYN_SF', 'RED_SF'];
-
-const NAME_SUFFIXES = /\b(jr|sr|ii|iii|iv|v)\b/g;
-
-function normalizeName(name: string): string {
-  return name.toLowerCase().replace(/[^a-z ]/g, '').replace(NAME_SUFFIXES, '').replace(/\s+/g, ' ').trim();
-}
-
-/** rankToValue with 999.9 amplitude */
-function rankToValue(rank: number, totalPlayers: number): number {
-  const N = totalPlayers;
-  const raw = 999.9 * Math.exp(-RANK_DECAY_K * (rank - 1) / N);
-  return clampRound(raw);
-}
-
-/** Old rankToValue with 100 amplitude (×10 for migration) */
+/** Old rankToValue with 100 amplitude (×10 for migration) — kept local because it models what migration 004 produced. */
 function oldRankToValue100(rank: number, totalPlayers: number): number {
   const N = totalPlayers;
   const raw = 100 * Math.exp(-RANK_DECAY_K * (rank - 1) / N);
   return clampRound(raw);
-}
-
-function parseSleeperPlayers(raw: Record<string, any>): SleeperPlayer[] {
-  const players: SleeperPlayer[] = [];
-  for (const [, p] of Object.entries(raw) as [string, any][]) {
-    if (!VALID_POSITIONS.includes(p.position)) continue;
-    if (!p.full_name) continue;
-    const hasTeam = p.team != null;
-    const isNotable = (p.search_rank ?? 9999) < 500;
-    if (!hasTeam && !isNotable) continue;
-    const statusLower = (p.status || 'active').toLowerCase();
-    if (statusLower !== 'active') continue;
-    if (!hasTeam) {
-      const yearsExp = p.years_exp ?? 0;
-      const age = p.age ?? 0;
-      if (yearsExp >= 12) continue;
-      if (yearsExp >= 10 && age >= 33) continue;
-      if (yearsExp >= 8 && age >= 35) continue;
-    }
-    players.push({
-      player_id: p.player_id,
-      full_name: p.full_name,
-      position: p.position,
-      team: p.team || null,
-      age: p.age || null,
-      status: p.status || 'Active',
-      search_rank: p.search_rank ?? 9999,
-      years_exp: p.years_exp ?? 0,
-    });
-  }
-  players.sort((a, b) => a.search_rank - b.search_rank);
-  return players;
-}
-
-function loadSleeperPlayers(config: SeedConfig): SleeperPlayer[] {
-  let raw: Record<string, any>;
-  if (config.fixturesMode) {
-    const filePath = path.join(config.dataDir, 'fixtures/sleeper-players.sample.json');
-    raw = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
-  } else {
-    const cachePath = path.join(config.dataDir, 'raw/sleeper-players.json');
-    raw = JSON.parse(fs.readFileSync(cachePath, 'utf-8'));
-  }
-  return parseSleeperPlayers(raw);
-}
-
-function loadCsvNameSet(config: SeedConfig): Set<string> {
-  const names = new Set<string>();
-  for (const setCode of CSV_SETS) {
-    const rows = loadSeedRankings(config, setCode);
-    for (const row of rows) names.add(normalizeName(row.name));
-  }
-  return names;
-}
-
-function loadSeedRankings(config: SeedConfig, setCode: string): SeedRankingRow[] {
-  const manualPath = path.join(config.dataDir, `seed-rankings/${setCode}.csv`);
-  const fixturePath = path.join(config.dataDir, 'fixtures/seed-rankings.sample.csv');
-  const csvPath = config.fixturesMode ? fixturePath : (fs.existsSync(manualPath) ? manualPath : fixturePath);
-  const content = fs.readFileSync(csvPath, 'utf-8');
-  const lines = content.trim().split('\n');
-  const rows: SeedRankingRow[] = [];
-  for (let i = 1; i < lines.length; i++) {
-    const parts = lines[i].split(',');
-    if (parts.length < 4) continue;
-    rows.push({
-      rank: parseInt(parts[0], 10),
-      name: parts[1].trim(),
-      position: parts[2].trim(),
-      team: parts[3].trim(),
-    });
-  }
-  return rows;
-}
-
-function matchPlayer(
-  name: string,
-  position: string,
-  playersByName: Map<string, { id: number; position: string }[]>
-): number | null {
-  const normalized = normalizeName(name);
-  const candidates = playersByName.get(normalized);
-  if (candidates) {
-    const posMatch = candidates.find(c => c.position === position);
-    return posMatch?.id ?? candidates[0]?.id ?? null;
-  }
-  return null;
-}
-
-/** Recover seed ranks exactly as seedService does */
-function recoverSeedRanks(db: Database.Database, config: SeedConfig): Map<number, { rank: number; position: Position; baseSet: string }> {
-  const csvNameSet = loadCsvNameSet(config);
-  const sleeperPlayers = loadSleeperPlayers(config).filter(p => csvNameSet.has(normalizeName(p.full_name)));
-
-  const allPlayers = db.prepare('SELECT id, name, position FROM players').all() as { id: number; name: string; position: string }[];
-  const playersByName = new Map<string, { id: number; position: string }[]>();
-  for (const p of allPlayers) {
-    const key = normalizeName(p.name);
-    const arr = playersByName.get(key) || [];
-    arr.push({ id: p.id, position: p.position });
-    playersByName.set(key, arr);
-  }
-
-  const seedRanks = new Map<number, { rank: number; position: Position; baseSet: string }>();
-
-  for (const setCode of CSV_SETS) {
-    const seedRankings = loadSeedRankings(config, setCode);
-    for (const row of seedRankings) {
-      const playerId = matchPlayer(row.name, row.position, playersByName);
-      if (!playerId) continue;
-      const asset = db.prepare('SELECT id FROM assets WHERE player_id = ?').get(playerId) as { id: number } | undefined;
-      if (!asset) continue;
-      if (!seedRanks.has(asset.id)) {
-        seedRanks.set(asset.id, { rank: row.rank, position: row.position as Position, baseSet: setCode });
-      }
-    }
-  }
-  return seedRanks;
-}
-
-/** Compute precise base value using 999.9 amplitude, matching seedService expansion logic */
-function computePreciseBase(
-  rank: number,
-  totalPlayers: number,
-  position: Position,
-  baseSet: string,
-  targetLeagueType: { code: string; format: string; qb: string; rec: string; tep: number },
-): number {
-  // Step 1: Compute base value from rank with 999.9 amplitude
-  const baseValue = rankToValue(rank, totalPlayers);
-
-  // Step 2: Apply scoring multipliers (exactly matching seedService)
-  let value = baseValue;
-
-  // Reception scoring adjustment
-  if (targetLeagueType.rec === 'HALF') {
-    const mult = SCORING_MULTIPLIERS.HALF[position as keyof typeof SCORING_MULTIPLIERS.HALF];
-    value *= mult;
-  } else if (targetLeagueType.rec === 'ZERO') {
-    const mult = SCORING_MULTIPLIERS.ZERO[position as keyof typeof SCORING_MULTIPLIERS.ZERO];
-    value *= mult;
-  }
-
-  // TEP adjustment
-  if (targetLeagueType.tep === 1 && position === 'TE') {
-    value *= SCORING_MULTIPLIERS.TEP.TE;
-  }
-
-  return clampRound(value);
-}
-
-/** Compute old quantized base (what migration 004 produced) */
-function computeQuantizedBase(
-  rank: number,
-  totalPlayers: number,
-  position: Position,
-  baseSet: string,
-  targetLeagueType: { code: string; format: string; qb: string; rec: string; tep: number },
-): number {
-  // Old: 100 * exp(...) → clampRound → ×10 (migration)
-  const oldBase = oldRankToValue100(rank, totalPlayers);
-
-  let value = oldBase;
-
-  if (targetLeagueType.rec === 'HALF') {
-    const mult = SCORING_MULTIPLIERS.HALF[position as keyof typeof SCORING_MULTIPLIERS.HALF];
-    value *= mult;
-  } else if (targetLeagueType.rec === 'ZERO') {
-    const mult = SCORING_MULTIPLIERS.ZERO[position as keyof typeof SCORING_MULTIPLIERS.ZERO];
-    value *= mult;
-  }
-
-  if (targetLeagueType.tep === 1 && position === 'TE') {
-    value *= SCORING_MULTIPLIERS.TEP.TE;
-  }
-
-  return clampRound(value * 10); // This is what migration 004 produced
 }
 
 interface LeagueTypeRow {
@@ -262,21 +71,37 @@ async function main(): Promise<void> {
     const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
 
     // Load league types
-    const leagueTypes = db.prepare('SELECT * FROM league_types').all() as LeagueTypeRow[];
-    const ltByCode = new Map(leagueTypes.map(lt => [lt.code, lt]));
+    const dbForLts = initDb(dbPath);
+    const leagueTypes = dbForLts.prepare('SELECT * FROM league_types').all() as {
+      id: number;
+      code: string;
+      format: string;
+      qb: string;
+      rec: string;
+      tep: number;
+    }[];
+    closeDb(dbForLts);
 
-    // Recover seed ranks for all assets
+    const ltByCode = new Map(leagueTypes.map(lt => [lt.code, lt]));
+    const ltById = new Map(leagueTypes.map(lt => [lt.id, lt]));
+
+    // --- 1. Recover seed ranks ---
     console.log('\n[1/5] Recovering seed ranks from CSV sources...');
-    const seedRanks = recoverSeedRanks(db, config);
+    const dbForRanks = initDb(dbPath);
+    const config: SeedConfig = { fixturesMode: false, dataDir: DATA_DIR };
+    const seedRanks = recoverSeedRanks(dbForRanks, { fixturesMode: false, dataDir: DATA_DIR });
+    closeDb(dbForRanks);
     console.log(`  Recovered ranks for ${seedRanks.size} assets`);
 
-    // Get current values from DB
+    // --- 2. Read current values ---
     console.log('\n[2/5] Reading current asset values...');
-    const currentValues = db.prepare(`
+    const dbForValues = initDb(dbPath);
+    const currentValues = dbForValues.prepare(`
       SELECT av.asset_id, av.league_type_id, av.value, lt.code as leagueTypeCode
       FROM asset_values av
       JOIN league_types lt ON lt.id = av.league_type_id
     `).all() as { asset_id: number; league_type_id: number; value: number; leagueTypeCode: string }[];
+    closeDb(dbForValues);
 
     const currentByAsset = new Map<number, Map<number, { value: number; code: string }>>();
     for (const row of currentValues) {
@@ -285,12 +110,23 @@ async function main(): Promise<void> {
       currentByAsset.set(row.asset_id, m);
     }
 
-    // Process each asset with a recovered rank
+    // --- 3. For each asset, group by base set and compute precise base per league type ---
     console.log('\n[3/5] Computing rebase deltas...');
+
+    // First, compute N per base set from the actual seed CSV row counts
+    const config: SeedConfig = { fixturesMode: false, dataDir: DATA_DIR };
+    const baseSetSizes = new Map<string, number>();
+    const CSV_SETS = ['DYN_1QB', 'RED_1QB', 'DYN_SF', 'RED_SF'];
+    for (const setCode of ['DYN_1QB', 'RED_1QB', 'DYN_SF', 'RED_SF']) {
+      const rows = loadSeedRankingsCSV({ fixturesMode: false, dataDir: DATA_DIR }, setCode);
+      baseSetSizes.set(setCode, rows.length);
+    }
+    console.log('  Base set N values:', Object.fromEntries(baseSetSizes));
+
     let touched = 0;
     let unchanged = 0;
     let noRank = 0;
-    const deltas: { assetId: number; code: string; old: number; new: number; drift: number }[] = [];
+    const deltas: { assetId: number; code: string; old: number; new: number; drift: number; baseBefore: number; baseAfter: number }[] = [];
 
     for (const [assetId, rankInfo] of seedRanks) {
       const currentMap = currentByAsset.get(assetId);
@@ -300,7 +136,11 @@ async function main(): Promise<void> {
       }
 
       const { rank, position, baseSet } = rankInfo;
-      const totalPlayers = 358; // Fixed N as used in seedService
+      const N = baseSetSizes.get(baseSet);
+      if (!N) {
+        noRank++;
+        continue;
+      }
 
       for (const [ltId, { value: currentValue, code }] of currentMap) {
         const lt = ltByCode.get(code);
@@ -311,19 +151,42 @@ async function main(): Promise<void> {
         if (baseKey !== baseSet) continue;
 
         // Compute precise base with 999.9 amplitude
-        const preciseBase = computePreciseBase(rank, 358, rankInfo.position, baseSet, lt);
+        const preciseBase = rankToValue(rank, N);
+        const baseAfter = applyScoringMultipliers(preciseBase, position, {
+          code: lt.code,
+          format: lt.format,
+          qb: lt.qb,
+          rec: lt.rec,
+          tep: lt.tep,
+        } as LeagueType);
 
         // Compute quantized base (what migration 004 produced)
-        const quantizedBase = computeQuantizedBase(rank, 358, rankInfo.position, baseSet, lt);
+        const quantizedBase = oldRankToValue100(rank, N);
+        const quantizedBaseAfter = applyScoringMultipliers(quantizedBase, position, {
+          code: lt.code,
+          format: lt.format,
+          qb: lt.qb,
+          rec: lt.rec,
+          tep: lt.tep,
+        } as LeagueType);
+        const quantizedBaseFinal = clampRound(quantizedBaseAfter * 10); // This is what migration 004 produced
 
         // Drift = current - quantizedBase (preserves all accumulated changes)
-        const drift = currentValue - quantizedBase;
+        const drift = currentValue - quantizedBaseFinal;
 
         // New value = preciseBase + drift
-        const newValue = clampRound(preciseBase + drift);
+        const newValue = clampRound(baseAfter + drift);
 
         if (newValue !== currentValue) {
-          deltas.push({ assetId, code, old: currentValue, new: newValue, drift });
+          deltas.push({
+            assetId,
+            code,
+            old: currentValue,
+            new: newValue,
+            drift,
+            baseBefore: quantizedBaseFinal,
+            baseAfter,
+          });
           touched++;
         } else {
           unchanged++;
@@ -350,43 +213,45 @@ async function main(): Promise<void> {
       return;
     }
 
-    // Write changes
+    // --- 4. Write changes ---
     console.log('\n[4/5] Writing changes to DB...');
-    const updateValue = db.prepare('UPDATE asset_values SET value = ?, updated_at = ? WHERE asset_id = ? AND league_type_id = ?');
-    const insertLog = db.prepare(`
+    const dbForWrite = initDb(dbPath);
+    const updateValue = dbForWrite.prepare('UPDATE asset_values SET value = ?, updated_at = ? WHERE asset_id = ? AND league_type_id = ?');
+    const insertLog = dbForWrite.prepare(`
       INSERT INTO adjustment_log (asset_id, league_type_id, old_value, new_value, delta, reason, detail)
       VALUES (?, ?, ?, ?, ?, 'manual', ?)
     `);
-    const insertHistory = db.prepare(`
+    const insertHistory = dbForWrite.prepare(`
       INSERT OR REPLACE INTO value_history (asset_id, league_type_id, date, value)
       VALUES (?, ?, ?, ?)
     `);
     const today = new Date().toISOString().slice(0, 10);
 
-    const writeTxn = db.transaction(() => {
+    const writeTxn = dbForWrite.transaction(() => {
       for (const d of deltas) {
-        updateValue.run(d.new, now, d.assetId, ltByCode.get(d.code)!.id);
+        const ltId = ltByCode.get(d.code)!.id;
+        updateValue.run(d.new, now, d.assetId, ltId);
         const delta = Math.round((d.new - d.old) * 10) / 10;
         const detail = JSON.stringify({
           rebase: true,
-          baseBefore: (d.old - d.drift).toFixed(1),
-          baseAfter: (d.new - d.drift).toFixed(1),
+          baseBefore: d.baseBefore.toFixed(1),
+          baseAfter: d.baseAfter.toFixed(1),
           driftPreserved: d.drift.toFixed(1),
         });
-        insertLog.run(d.assetId, ltByCode.get(d.code)!.id, d.old, d.new, delta, detail);
-        insertHistory.run(d.assetId, ltByCode.get(d.code)!.id, today, d.new);
+        insertLog.run(d.assetId, ltId, d.old, d.new, delta, detail);
+        insertHistory.run(d.assetId, ltId, today, d.new);
       }
     });
     writeTxn();
+    closeDb(dbForWrite);
     console.log(`  Wrote ${deltas.length} adjustments to DB.`);
 
-    // Export CSVs
+    // --- 5. Export CSVs ---
     console.log('\n[5/5] Exporting updated rankings CSVs...');
-    const exportCmd = 'npm run rankings:export';
-    console.log(`  Run: ${exportCmd} (outside this script)`);
+    console.log(`  Run: npm run rankings:export (outside this script)`);
     console.log('\n✅ Precision rebase complete!');
   } finally {
-    closeDb();
+    closeDb(db);
   }
 }
 

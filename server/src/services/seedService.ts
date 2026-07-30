@@ -11,7 +11,17 @@ import {
   PICK_SF_FIRST_ROUND_MULTIPLIER,
   PICK_YEARS,
 } from '@empire-fantasy/shared';
-import type { Position, Format, QBSetting, PickTier } from '@empire-fantasy/shared';
+import type { Position, Format, QBSetting, PickTier, RecScoring, TEPSetting } from '@empire-fantasy/shared';
+
+/** Database league type (as stored in DB - tep is 0/1) */
+interface DbLeagueType {
+  id: number;
+  code: string;
+  format: Format;
+  qb: QBSetting;
+  rec: RecScoring;
+  tep: number;
+}
 
 interface SleeperPlayer {
   player_id: string;
@@ -38,7 +48,8 @@ interface SeedConfig {
 
 const VALID_POSITIONS: Position[] = ['QB', 'RB', 'WR', 'TE'];
 
-function parseSleeperPlayers(raw: Record<string, any>): SleeperPlayer[] {
+/** Parse raw Sleeper players JSON into typed array, applying filters. */
+export function parseSleeperPlayers(raw: Record<string, any>): SleeperPlayer[] {
   const players: SleeperPlayer[] = [];
 
   for (const [, p] of Object.entries(raw) as [string, any][]) {
@@ -80,7 +91,7 @@ function parseSleeperPlayers(raw: Record<string, any>): SleeperPlayer[] {
   return players;
 }
 
-function loadSleeperPlayers(config: SeedConfig): SleeperPlayer[] {
+export function loadSleeperPlayers(config: SeedConfig): SleeperPlayer[] {
   let raw: Record<string, any>;
 
   if (config.fixturesMode) {
@@ -98,8 +109,88 @@ function loadSleeperPlayers(config: SeedConfig): SleeperPlayer[] {
 
 const CSV_SETS = ['DYN_1QB', 'RED_1QB', 'DYN_SF', 'RED_SF'];
 
-/** Load all seed CSVs and return a set of canonical player names. */
-function loadCsvNameSet(config: SeedConfig): Set<string> {
+/**
+ * Apply the exact same scoring multiplier chain that seedService uses
+ * to expand a base value (from rankToValue) into a full league-type value.
+ * This mirrors the logic in the expandAll transaction.
+ */
+export function applyScoringMultipliers(
+  baseValue: number,
+  position: Position,
+  leagueType: DbLeagueType,
+): number {
+  let value = baseValue;
+
+  // Reception scoring adjustment
+  if (leagueType.rec === 'HALF') {
+    const mult = SCORING_MULTIPLIERS.HALF[position as keyof typeof SCORING_MULTIPLIERS.HALF];
+    value *= mult;
+  } else if (leagueType.rec === 'ZERO') {
+    const mult = SCORING_MULTIPLIERS.ZERO[position as keyof typeof SCORING_MULTIPLIERS.ZERO];
+    value *= mult;
+  }
+  // PPR is the baseline, no adjustment
+
+  // TEP adjustment
+  if (leagueType.tep === 1 && position === 'TE') {
+    value *= SCORING_MULTIPLIERS.TEP.TE;
+  }
+
+  return clampRound(value);
+}
+
+/**
+ * Load seed rankings from CSV for a given base set.
+ * Returns the raw rows with rank, name, position, team.
+ */
+export function loadSeedRankingsCSV(config: SeedConfig, setCode: string): SeedRankingRow[] {
+  return loadSeedRankings(config, setCode);
+}
+
+/**
+ * Recover seed ranks for all assets by matching CSV rankings to DB players.
+ * Returns a map of assetId -> { rank, position, baseSet }.
+ * This is the same logic seedService uses during seeding.
+ */
+export function recoverSeedRanks(
+  db: Database.Database,
+  config: SeedConfig,
+): Map<number, { rank: number; position: Position; baseSet: string }> {
+  const csvNameSet = loadCsvNameSet(config);
+  const sleeperPlayers = loadSleeperPlayers(config).filter(p =>
+    csvNameSet.has(normalizeName(p.full_name))
+  );
+
+  const allPlayers = db.prepare('SELECT id, name, position FROM players').all() as { id: number; name: string; position: string }[];
+  const playersByName = new Map<string, { id: number; position: string }[]>();
+  for (const p of allPlayers) {
+    const key = normalizeName(p.name);
+    const arr = playersByName.get(key) || [];
+    arr.push({ id: p.id, position: p.position });
+    playersByName.set(key, arr);
+  }
+
+  const seedRanks = new Map<number, { rank: number; position: Position; baseSet: string }>();
+
+  for (const setCode of CSV_SETS) {
+    const seedRankings = loadSeedRankings(config, setCode);
+    for (const row of seedRankings) {
+      const playerId = matchPlayer(row.name, row.position, playersByName);
+      if (!playerId) continue;
+      const asset = db.prepare('SELECT id FROM assets WHERE player_id = ?').get(playerId) as { id: number } | undefined;
+      if (!asset) continue;
+      if (!seedRanks.has(asset.id)) {
+        seedRanks.set(asset.id, { rank: row.rank, position: row.position as Position, baseSet: setCode });
+      }
+    }
+  }
+  return seedRanks;
+}
+
+/**
+ * Load all seed CSVs and return a set of canonical player names.
+ */
+export function loadCsvNameSet(config: SeedConfig): Set<string> {
   const names = new Set<string>();
   for (const setCode of CSV_SETS) {
     const rows = loadSeedRankings(config, setCode);
@@ -110,7 +201,7 @@ function loadCsvNameSet(config: SeedConfig): Set<string> {
   return names;
 }
 
-function loadSeedRankings(config: SeedConfig, setCode: string): SeedRankingRow[] {
+export function loadSeedRankings(config: SeedConfig, setCode: string): SeedRankingRow[] {
   // Try manual CSVs first, then fixture (both sets share the fixture in test mode)
   const manualPath = path.join(config.dataDir, `seed-rankings/${setCode}.csv`);
   const fixturePath = path.join(config.dataDir, 'fixtures/seed-rankings.sample.csv');
@@ -138,7 +229,7 @@ function loadSeedRankings(config: SeedConfig, setCode: string): SeedRankingRow[]
 
 const NAME_SUFFIXES = /\b(jr|sr|ii|iii|iv|v)\b/g;
 
-function normalizeName(name: string): string {
+export function normalizeName(name: string): string {
   return name.toLowerCase().replace(/[^a-z ]/g, '').replace(NAME_SUFFIXES, '').replace(/\s+/g, ' ').trim();
 }
 
@@ -147,7 +238,7 @@ function normalizeName(name: string): string {
  * Strips suffixes (Jr, III, etc.) so "Kenneth Walker III" matches "Kenneth Walker".
  * Returns player ID or null.
  */
-function matchPlayer(
+export function matchPlayer(
   name: string,
   position: string,
   playersByName: Map<string, { id: number; position: string }[]>
