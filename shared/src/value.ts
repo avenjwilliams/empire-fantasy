@@ -2,6 +2,7 @@ import type { TradeAsset, TradeSide, TradeResult, Verdict, Position, RecScoring,
 import {
   SCORING, REC_BONUS, TEP_BONUS,
   STAT_SENSITIVITY, STAT_CAP, AGE_NUDGE,
+  RANK_DECAY_K,
 } from './constants.js';
 
 // =====================================================
@@ -64,6 +65,17 @@ export function getVerdict(lean: number): Verdict {
   if (absLean < TRADE_CONSTANTS.BANDS[1].threshold) return 'Slight edge';
   if (absLean < TRADE_CONSTANTS.BANDS[2].threshold) return 'Clear win';
   return 'Landslide';
+}
+
+/**
+ * Convert rank (1-based) to value (1.0-1000.0).
+ * Uses exponential decay: value = 999.9 * exp(-k * (rank-1) / N)
+ * Tuned so rank 1 = 999.9, rank ~50 ≈ 620, rank ~200 ≈ 143.
+ */
+export function rankToValue(rank: number, totalPlayers: number): number {
+  const N = totalPlayers;
+  const raw = 999.9 * Math.exp(-RANK_DECAY_K * (rank - 1) / N);
+  return clampRound(raw);
 }
 
 /** Compute weighted side value from an array of asset values (already sorted desc). */

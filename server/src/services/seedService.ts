@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import {
   clampRound,
+  rankToValue,
   RANK_DECAY_K,
   SCORING_MULTIPLIERS,
   PICK_VALUES,
@@ -36,21 +37,6 @@ interface SeedConfig {
 }
 
 const VALID_POSITIONS: Position[] = ['QB', 'RB', 'WR', 'TE'];
-
-// ------ Rank → Value Curve ------
-
-/**
- * Convert rank (1-based) to value (1.0-1000.0).
- * Uses exponential decay: value = 1000 * exp(-k * (rank-1) / N)
- * Tuned so rank 1 ≈ 1000, rank ~50 ≈ 650, rank ~200 ≈ 150.
- */
-export function rankToValue(rank: number, totalPlayers: number): number {
-  const N = totalPlayers;
-  const raw = 1000 * Math.exp(-RANK_DECAY_K * (rank - 1) / N);
-  return clampRound(raw);
-}
-
-// ------ Player Loading ------
 
 function parseSleeperPlayers(raw: Record<string, any>): SleeperPlayer[] {
   const players: SleeperPlayer[] = [];

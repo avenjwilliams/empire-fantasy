@@ -10,6 +10,7 @@
     "stats:week": "tsx scripts/ingest-week.ts",
     "rankings:export": "tsx scripts/export-rankings.ts",
     "rankings:import": "tsx scripts/import-rankings.ts",
+    "rankings:rebase": "tsx scripts/rebase-precision.ts",
     "snapshot": "tsx scripts/snapshot-history.ts"
   },
   "devDependencies": {

@@ -49,6 +49,7 @@ npm run seed
 | `npm run stats:week -- --season 2026 --week N` | Ingest weekly stats |
 | `npm run rankings:export` | Export DB rankings to CSV |
 | `npm run rankings:import` | Import edited CSVs back to DB |
+| `npm run rankings:rebase` | Rebase stored values to native 999.9-scale precision (preserves drift) |
 | `npm run snapshot` | Write daily value_history snapshot |
 
 Add `--fixtures` or set `EF_FIXTURES=1` to use offline fixture data for `seed` and `stats:week`.
@@ -95,6 +96,17 @@ The image bundles `data/rankings/`, `scripts/`, and `server/src` specifically so
 ### Daily snapshot
 
 Run `npm run snapshot` once per day to power value-over-time charts on the player detail page. This copies current `asset_values` into `value_history` for the current date.
+
+### Precision rebase (one-time)
+
+If the database was migrated from the old 1–100 scale via the ×10 migration (004), all values end in `.0` and the native 1–1000 precision is lost. Run:
+
+```bash
+npm run rankings:rebase -- --dry-run   # preview: assets touched, % whole numbers, max delta
+npm run rankings:rebase                # apply for real
+```
+
+This script recovers each asset's original seed rank from the same CSV sources `seedService` uses, computes the precise 999.9-scale base value, adds back the accumulated drift (votes + stats + nudges + manual edits), and writes the corrected value. It logs every change as `reason='manual'` with a detail field explaining the base/drift split. Rookie picks are excluded (they legitimately sit on round numbers). Run inside the container against `/data/empire-fantasy.db` via `fly ssh console` if doing it on prod.
 
 ## League Types
 

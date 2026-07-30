@@ -5,6 +5,7 @@ import {
   getWeight,
   getVerdict,
   evaluateTrade,
+  rankToValue,
   TRADE_CONSTANTS,
   VOTE_CONSTANTS,
   computePairwiseDelta,
@@ -16,6 +17,7 @@ import {
   populationStddev,
   round1,
 } from './value.js';
+import { RANK_DECAY_K } from './constants.js';
 
 describe('value.ts', () => {
   describe('clampRound', () => {
@@ -797,6 +799,58 @@ describe('value.ts', () => {
 
     it('returns 1 for identical values', () => {
       expect(populationStddev([10, 10, 10])).toBe(1);
+    });
+  });
+
+  // =====================================================
+  // Precision Invariant Tests (Fix 3)
+  // =====================================================
+
+  describe('rankToValue precision invariants', () => {
+    const N = 358; // fixture dataset size
+
+    it('rank 1 returns exactly 999.9 — never 1000.0', () => {
+      expect(rankToValue(1, N)).toBe(999.9);
+    });
+
+    it('matches expected fixture values at N=358', () => {
+      expect(rankToValue(2, N)).toBe(990.2);
+      expect(rankToValue(3, N)).toBe(980.5);
+      expect(rankToValue(5, N)).toBe(961.6);
+      expect(rankToValue(10, N)).toBe(915.7);
+      expect(rankToValue(50, N)).toBe(619.3);
+      expect(rankToValue(100, N)).toBe(379.9);
+      expect(rankToValue(200, N)).toBe(142.9);
+      expect(rankToValue(358, N)).toBe(30.5);
+    });
+
+    it('fewer than 15% of ranks land on a whole number (precision invariant)', () => {
+      let whole = 0;
+      for (let r = 1; r <= N; r++) {
+        const v = rankToValue(r, N);
+        if (v === Math.floor(v)) whole++;
+      }
+      const pct = whole / N;
+      expect(pct).toBeLessThan(0.15); // expect ~8% for exponential at 1 decimal
+      // also sanity-check it's not 100% (the old bug)
+      expect(pct).toBeGreaterThan(0.01);
+    });
+
+    it('is strictly monotonically decreasing in rank', () => {
+      let prev = rankToValue(1, N);
+      for (let r = 2; r <= N; r++) {
+        const curr = rankToValue(r, N);
+        expect(curr).toBeLessThan(prev);
+        prev = curr;
+      }
+    });
+
+    it('never exceeds 999.9 and never below 1.0', () => {
+      for (let r = 1; r <= N; r++) {
+        const v = rankToValue(r, N);
+        expect(v).toBeLessThanOrEqual(999.9);
+        expect(v).toBeGreaterThanOrEqual(1.0);
+      }
     });
   });
 });

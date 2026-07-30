@@ -10,6 +10,7 @@ Living list of deferred features and next steps. Add new items here; move finish
 - **User accounts** — replace anonymous sessions; per-user vote history.
 - **League import from Sleeper** — pull a real league's rosters so users can evaluate trades with their actual teams.
 - **Light/dark theme toggle.**
+- **Top-asset ceiling pinning** — rank 1 seeds at 999.9 against a 1000.0 clamp, so the #1 asset has ~0.1 of upside (one vote) and the crowd can only move it down. Options to weigh later: lower the curve amplitude to reserve real headroom, or make the clamp ceiling soft.
 
 ## Next steps
 
@@ -27,6 +28,7 @@ Done — see Done section.
 
 ## Done
 
+- 2026-07-29 — **Precision rebase (1–1000 native scale)**: 999.9 amplitude in rankToValue, clampRound bounds [1.0, 1000.0], precision invariant tests (<15% whole numbers). Script `npm run rankings:rebase` recovers seed ranks from CSVs, computes precise base, preserves accumulated drift, logs as reason='manual'. Rookie picks excluded. Clamp at 1000.0 leaves 0.1 headroom for #1 asset (top-asset ceiling pinning deferred).
 - 2026-07-29 — **Value scale 1–100 → 1–1000**: widened player values from 1.0–100.0 to 1.0–1000.0 (one decimal). Scale invariance preserved in trade calculator (verdict/scale unchanged). Asymmetry: vote/stat deltas stay absolute (10× damped), age nudges and seed values ×10, INACTIVE_DECAY_RATE unchanged (multiplicative). Migration 004_value_scale_1000.sql rebuilds asset_values with new CHECK bound, scales adjustment_log and value_history. ELO_SCALE → 120, clampRound bounds → [1.0, 1000.0], PICK_VALUES ×10, AGE_NUDGE ×10, MIN_VALUE_FOR_EXPECTATION/INACTIVE_MIN_VALUE → 50. Tests updated; all 92 pass.
 - 2026-07-26 — KTC first-visit popup: modal overlay on first visit (localStorage `ef_ktc_seen`), dismissible; KTC tab still available for voluntary votes.
 - 2026-07-26 — Trade calculator math transparency: expandable "show the math" panel with per-asset breakdown (value → trueValue → weight → weighted) and formula explanation.

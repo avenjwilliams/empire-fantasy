@@ -30,7 +30,7 @@ All fetch code takes a `--fixtures` flag (or `EF_FIXTURES=1`) that reads these i
 1. Pull Sleeper players; filter to QB/RB/WR/TE with an NFL team or notable FA status; insert `players` + `assets` rows. Skip players with no meaningful fantasy relevance (e.g. keep top ~400 by Sleeper search rank to avoid 3,000 dead rows).
 2. Fetch source rankings for the **4 base sets**: `DYN_1QB`, `DYN_SF`, `RED_1QB`, `RED_SF` (PPR baseline).
 3. Convert rank → value 1.0–1000.0 with a monotone curve (not linear — the gap between rank 1 and 10 is much bigger than 101 and 110):
-   `value = 1000 * exp(-k * (rank - 1) / N)` shaped so rank 1 ≈ 1000.0, rank ~50 ≈ 650, rank ~200 ≈ 150, floor 1.0. Tune `k` and document the chosen constants in code.
+   `value = 999.9 * exp(-k * (rank - 1) / N)` shaped so rank 1 = 999.9, rank ~50 ≈ 620, rank ~200 ≈ 143, floor 1.0. Tune `k` and document the chosen constants in code.
 4. **Expand 4 base sets → 24 league types** by applying scoring deltas, then re-normalizing to 1–1000:
    - `HALF`: WR/TE/pass-catching RB values × ~0.97; `ZERO`: × ~0.93 (position-level multipliers; QBs unchanged).
    - `TEP`: TE values × ~1.12 in TEP sets.
@@ -47,6 +47,19 @@ All fetch code takes a `--fixtures` flag (or `EF_FIXTURES=1`) that reads these i
    Years further out: × 0.95 per additional year.
 6. Write every seeded value to `adjustment_log` with `reason='seed'`, `old_value=new_value` on first insert (delta 0), and take a day-0 `value_history` snapshot.
 7. Export all 24 CSVs.
+
+## Precision rebase (scripts/rebase-precision.ts)
+
+Run `npm run rankings:rebase` (or `tsx scripts/rebase-precision.ts`) to restore full-precision values that were quantized by migration 004 (which multiplied 1-decimal 100-scale values by 10). The script:
+
+1. Recovers each asset's original seed rank from the same CSV sources `seedService` uses (four base CSVs + four root CSVs).
+2. Computes `preciseBase = rankToValue(rank, N)` with the 999.9 amplitude, then applies the exact same scoring-multiplier chain `seedService` uses.
+3. Computes `drift = currentValue − quantizedBase`, where `quantizedBase` is what migration 004 produced (old 100-scale curve clamped, then ×10).
+4. Writes `newValue = clampRound(preciseBase + drift)`, preserving all accumulated vote/stat/manual/decay drift.
+5. Logs each change to `adjustment_log` with `reason='manual'` and a detail explaining the rebase (e.g. `base 990.0→990.2, drift +0.4`).
+6. Run with `--dry-run` first to preview touched assets, largest deltas, and the resulting % of values ending in `.0`.
+
+This is idempotent (no-op if re-run) and never reorders rankings — it only restores decimals while preserving all crowd/stat history.
 
 ## CSV format (data/rankings/{CODE}.csv)
 

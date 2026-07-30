@@ -90,6 +90,10 @@ Season-scale sanity check: a player beating expectations by 1 stddev every week 
 
 **Asymmetry by design:** Vote and stat deltas stay absolute (10× damped relatively on the 1–1000 scale), while age nudges and seeded values scale ×10. This is intentional: crowd noise is dampened, structural drift is preserved.
 
+### Precision rebase
+
+Migration 004 widened the scale 10× but the stored values were already quantized to .0 on the 100-point scale, so every value ended in `.0`. Script `scripts/rebase-precision.ts` (run via `npm run rankings:rebase`) restores full precision by recovering each asset's seed rank from the original CSVs, recomputing the base value with the 999.9 curve, and adding back the preserved drift (votes, stats, manual edits, decay). Each changed value is logged to `adjustment_log` with `reason='manual'` and a detail like `precision rebase: base 990.0→990.2, drift +0.4`. No new `reason` enum value was added; the `CHECK` constraint on `adjustment_log.reason` would require a table rebuild.
+
 ## Picks
 
 - Vote-adjustable (in DYN prompts), never stat-adjusted.
