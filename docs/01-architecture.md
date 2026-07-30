@@ -84,7 +84,7 @@ CREATE TABLE league_types (
 CREATE TABLE asset_values (       -- current value
   asset_id INTEGER NOT NULL REFERENCES assets(id),
   league_type_id INTEGER NOT NULL REFERENCES league_types(id),
-  value REAL NOT NULL CHECK (value BETWEEN 1.0 AND 100.0),
+  value REAL NOT NULL CHECK (value BETWEEN 1.0 AND 1000.0),
   updated_at TEXT NOT NULL,
   PRIMARY KEY (asset_id, league_type_id)
 );

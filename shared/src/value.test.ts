@@ -31,21 +31,21 @@ describe('value.ts', () => {
       expect(clampRound(0.5)).toBe(1.0);
     });
 
-    it('clamps above 100.0 to 100.0', () => {
-      expect(clampRound(100.1)).toBe(100.0);
-      expect(clampRound(150)).toBe(100.0);
+    it('clamps above 1000.0 to 1000.0', () => {
+      expect(clampRound(1000.1)).toBe(1000.0);
+      expect(clampRound(1500)).toBe(1000.0);
     });
 
     it('preserves values within range', () => {
-      expect(clampRound(50.0)).toBe(50.0);
+      expect(clampRound(500.0)).toBe(500.0);
       expect(clampRound(1.0)).toBe(1.0);
-      expect(clampRound(100.0)).toBe(100.0);
+      expect(clampRound(1000.0)).toBe(1000.0);
     });
   });
 
   describe('trueValue', () => {
-    it('maps 100 to 100', () => {
-      expect(trueValue(100)).toBe(100);
+    it('maps 1000 to 1000', () => {
+      expect(trueValue(1000)).toBe(1000);
     });
 
     it('maps 0 to 0', () => {
@@ -53,16 +53,16 @@ describe('value.ts', () => {
     });
 
     it('is linear (same as input)', () => {
-      // v=80 is exactly 80% of v=100
-      const tv80 = trueValue(80);
-      const tv100 = trueValue(100);
-      expect(tv80).toBe(80);
-      expect(tv80 / tv100).toBeCloseTo(0.8);
+      // v=800 is exactly 80% of v=1000
+      const tv800 = trueValue(800);
+      const tv1000 = trueValue(1000);
+      expect(tv800).toBe(800);
+      expect(tv800 / tv1000).toBeCloseTo(0.8);
     });
 
     it('is monotonically increasing (invariant 5a)', () => {
       let prev = trueValue(0);
-      for (let v = 1; v <= 100; v++) {
+      for (let v = 1; v <= 1000; v++) {
         const curr = trueValue(v);
         expect(curr).toBeGreaterThan(prev);
         prev = curr;
@@ -70,10 +70,10 @@ describe('value.ts', () => {
     });
 
     it('matches expected values (linear identity)', () => {
-      expect(trueValue(80)).toBe(80);
-      expect(trueValue(60)).toBe(60);
-      expect(trueValue(40)).toBe(40);
-      expect(trueValue(20)).toBe(20);
+      expect(trueValue(800)).toBe(800);
+      expect(trueValue(600)).toBe(600);
+      expect(trueValue(400)).toBe(400);
+      expect(trueValue(200)).toBe(200);
     });
   });
 
@@ -132,28 +132,28 @@ describe('value.ts', () => {
     it('invariant 1: equal single players → Fair trade', () => {
       const result = evaluateTrade({
         leagueType: 'DYN_SF_PPR_TEP',
-        team1: [{ id: 1, name: 'Player A', value: 85.0 }],
-        team2: [{ id: 2, name: 'Player B', value: 85.0 }],
+        team1: [{ id: 1, name: 'Player A', value: 850.0 }],
+        team2: [{ id: 2, name: 'Player B', value: 850.0 }],
       });
       expect(result.scale).toBe(0);
       expect(result.verdict).toBe('Fair trade');
     });
 
-    // Invariant 2: One 95 vs three 55s → in linear mode, three 55s weighted total > 95
-    it('invariant 2: one 95 vs three 55s favors the three 55s side in linear mode', () => {
+    // Invariant 2: One 950 vs three 550s → in linear mode, three 550s weighted total > 950
+    it('invariant 2: one 950 vs three 550s favors the three 550s side in linear mode', () => {
       const result = evaluateTrade({
         leagueType: 'DYN_SF_PPR_TEP',
-        team1: [{ id: 1, name: 'Star', value: 95.0 }],
+        team1: [{ id: 1, name: 'Star', value: 950.0 }],
         team2: [
-          { id: 2, name: 'Mid A', value: 55.0 },
-          { id: 3, name: 'Mid B', value: 55.0 },
-          { id: 4, name: 'Mid C', value: 55.0 },
+          { id: 2, name: 'Mid A', value: 550.0 },
+          { id: 3, name: 'Mid B', value: 550.0 },
+          { id: 4, name: 'Mid C', value: 550.0 },
         ],
       });
       // In linear mode with depth weighting:
-      // Team 1: 95 * 1.0 = 95
-      // Team 2: 55*1.0 + 55*0.9 + 55*0.8 = 55 + 49.5 + 44 = 148.5
-      // diff = 95 - 148.5 = -53.5 → scale = -66 (Team 1 gives less value, so Team 2 favored)
+      // Team 1: 950 * 1.0 = 950
+      // Team 2: 550*1.0 + 550*0.9 + 550*0.8 = 550 + 495 + 440 = 1485
+      // diff = 950 - 1485 = -535 → scale = -66 (Team 1 gives less value, so Team 2 favored)
       expect(result.scale).toBeLessThan(0);
     });
 
@@ -161,41 +161,41 @@ describe('value.ts', () => {
     it('invariant 3: symmetric result when sides swap', () => {
       const result1 = evaluateTrade({
         leagueType: 'DYN_SF_PPR_TEP',
-        team1: [{ id: 1, name: 'Star', value: 95.0 }],
+        team1: [{ id: 1, name: 'Star', value: 950.0 }],
         team2: [
-          { id: 2, name: 'Mid A', value: 55.0 },
-          { id: 3, name: 'Mid B', value: 55.0 },
-          { id: 4, name: 'Mid C', value: 55.0 },
+          { id: 2, name: 'Mid A', value: 550.0 },
+          { id: 3, name: 'Mid B', value: 550.0 },
+          { id: 4, name: 'Mid C', value: 550.0 },
         ],
       });
 
       const result2 = evaluateTrade({
         leagueType: 'DYN_SF_PPR_TEP',
         team1: [
-          { id: 2, name: 'Mid A', value: 55.0 },
-          { id: 3, name: 'Mid B', value: 55.0 },
-          { id: 4, name: 'Mid C', value: 55.0 },
+          { id: 2, name: 'Mid A', value: 550.0 },
+          { id: 3, name: 'Mid B', value: 550.0 },
+          { id: 4, name: 'Mid C', value: 550.0 },
         ],
-        team2: [{ id: 1, name: 'Star', value: 95.0 }],
+        team2: [{ id: 1, name: 'Star', value: 950.0 }],
       });
 
       expect(result2.scale).toBe(-result1.scale);
     });
 
-    // Invariant 4: Adding a 10-value throw-in to a landslide barely moves the scale
+    // Invariant 4: Adding a 100-value throw-in to a landslide barely moves the scale
     it('invariant 4: throw-in barely moves a landslide', () => {
       const base = evaluateTrade({
         leagueType: 'DYN_SF_PPR_TEP',
-        team1: [{ id: 1, name: 'Elite', value: 98.0 }],
-        team2: [{ id: 2, name: 'Bench', value: 30.0 }],
+        team1: [{ id: 1, name: 'Elite', value: 980.0 }],
+        team2: [{ id: 2, name: 'Bench', value: 300.0 }],
       });
 
       const withThrowIn = evaluateTrade({
         leagueType: 'DYN_SF_PPR_TEP',
-        team1: [{ id: 1, name: 'Elite', value: 98.0 }],
+        team1: [{ id: 1, name: 'Elite', value: 980.0 }],
         team2: [
-          { id: 2, name: 'Bench', value: 30.0 },
-          { id: 3, name: 'Throw-in', value: 10.0 },
+          { id: 2, name: 'Bench', value: 300.0 },
+          { id: 3, name: 'Throw-in', value: 100.0 },
         ],
       });
 
@@ -209,8 +209,8 @@ describe('value.ts', () => {
     it('returns correct structure', () => {
       const result = evaluateTrade({
         leagueType: 'RED_1QB_HALF_STD',
-        team1: [{ id: 1, name: 'Player A', value: 70.0 }],
-        team2: [{ id: 2, name: 'Player B', value: 60.0 }],
+        team1: [{ id: 1, name: 'Player A', value: 700.0 }],
+        team2: [{ id: 2, name: 'Player B', value: 600.0 }],
       });
 
       expect(result.leagueType).toBe('RED_1QB_HALF_STD');
@@ -225,22 +225,22 @@ describe('value.ts', () => {
     it('scale is clamped to [-100, 100]', () => {
       const result = evaluateTrade({
         leagueType: 'DYN_SF_PPR_TEP',
-        team1: [{ id: 1, name: 'Star', value: 100.0 }],
-        team2: [{ id: 2, name: 'Scrub', value: 1.0 }],
+        team1: [{ id: 1, name: 'Star', value: 1000.0 }],
+        team2: [{ id: 2, name: 'Scrub', value: 10.0 }],
       });
       expect(result.scale).toBeLessThanOrEqual(100);
       expect(result.scale).toBeGreaterThanOrEqual(-100);
     });
 
     it('depth weighting penalizes additional assets', () => {
-      // Two 70s should not equal one 70 on the other side value-wise
+      // Two 700s should not equal one 700 on the other side value-wise
       const result = evaluateTrade({
         leagueType: 'DYN_SF_PPR_TEP',
         team1: [
-          { id: 1, name: 'A', value: 70.0 },
-          { id: 2, name: 'B', value: 70.0 },
+          { id: 1, name: 'A', value: 700.0 },
+          { id: 2, name: 'B', value: 700.0 },
         ],
-        team2: [{ id: 3, name: 'C', value: 70.0 }],
+        team2: [{ id: 3, name: 'C', value: 700.0 }],
       });
       // Team 1 gives more total value → favors Team 2
       expect(result.scale).toBeGreaterThan(0);
@@ -249,19 +249,19 @@ describe('value.ts', () => {
     it('provides adviceGap for uneven trades', () => {
       const result = evaluateTrade({
         leagueType: 'DYN_SF_PPR_TEP',
-        team1: [{ id: 1, name: 'Star', value: 90.0 }],
-        team2: [{ id: 2, name: 'Mid', value: 60.0 }],
+        team1: [{ id: 1, name: 'Star', value: 900.0 }],
+        team2: [{ id: 2, name: 'Mid', value: 600.0 }],
       });
       expect(result.adviceGap).not.toBeNull();
       expect(result.adviceGap!).toBeGreaterThan(1);
-      expect(result.adviceGap!).toBeLessThanOrEqual(100);
+      expect(result.adviceGap!).toBeLessThanOrEqual(1000);
     });
 
     it('adviceGap is null for fair trades', () => {
       const result = evaluateTrade({
         leagueType: 'DYN_SF_PPR_TEP',
-        team1: [{ id: 1, name: 'A', value: 75.0 }],
-        team2: [{ id: 2, name: 'B', value: 75.0 }],
+        team1: [{ id: 1, name: 'A', value: 750.0 }],
+        team2: [{ id: 2, name: 'B', value: 750.0 }],
       });
       expect(result.adviceGap).toBeNull();
     });
@@ -274,8 +274,8 @@ describe('value.ts', () => {
       // 1-for-1: equal penalties (both 0)
       const result1 = evaluateTrade({
         leagueType: 'DYN_SF_PPR_TEP',
-        team1: [{ id: 1, name: 'A', value: 75.0 }],
-        team2: [{ id: 2, name: 'B', value: 75.0 }],
+        team1: [{ id: 1, name: 'A', value: 750.0 }],
+        team2: [{ id: 2, name: 'B', value: 750.0 }],
       });
       expect(result1.valueAdjustment).toBeNull();
       expect(result1.valueAdjustmentSide).toBeNull();
@@ -286,12 +286,12 @@ describe('value.ts', () => {
       const result2 = evaluateTrade({
         leagueType: 'DYN_SF_PPR_TEP',
         team1: [
-          { id: 1, name: 'A', value: 70.0 },
-          { id: 2, name: 'B', value: 60.0 },
+          { id: 1, name: 'A', value: 700.0 },
+          { id: 2, name: 'B', value: 600.0 },
         ],
         team2: [
-          { id: 3, name: 'C', value: 70.0 },
-          { id: 4, name: 'D', value: 60.0 },
+          { id: 3, name: 'C', value: 700.0 },
+          { id: 4, name: 'D', value: 600.0 },
         ],
       });
       expect(result2.valueAdjustment).toBeNull();
@@ -301,65 +301,65 @@ describe('value.ts', () => {
     });
 
     it('1-for-2 => adjustment goes to the one-player side, equals depth-penalty shortfall', () => {
-      // Team 1: one 70-value player (penalty 0)
-      // Team 2: two players worth 40 each (penalty = 80 - (40 + 40*0.9) = 80 - 76 = 4)
+      // Team 1: one 700-value player (penalty 0)
+      // Team 2: two players worth 400 each (penalty = 800 - (400 + 400*0.9) = 800 - 760 = 40)
       const result = evaluateTrade({
         leagueType: 'DYN_SF_PPR_TEP',
-        team1: [{ id: 1, name: 'Star', value: 70.0 }],
+        team1: [{ id: 1, name: 'Star', value: 700.0 }],
         team2: [
-          { id: 2, name: 'Mid A', value: 40.0 },
-          { id: 3, name: 'Mid B', value: 40.0 },
+          { id: 2, name: 'Mid A', value: 400.0 },
+          { id: 3, name: 'Mid B', value: 400.0 },
         ],
       });
 
       // Team 1 has smaller penalty (0), so gets the adjustment
       expect(result.valueAdjustmentSide).toBe(1);
-      expect(result.valueAdjustment).toBe(4.0); // penalty diff = 4.0
-      expect(result.team1.adjustment).toBe(4.0);
+      expect(result.valueAdjustment).toBe(40.0); // penalty diff = 40.0
+      expect(result.team1.adjustment).toBe(40.0);
       expect(result.team2.adjustment).toBe(0);
       
-      // Team 1 total = rawSum (70) + adjustment (4) = 74
-      // Team 2 total = rawSum (80) + 0 = 80
-      expect(result.team1.sideValue).toBe(74.0);
-      expect(result.team2.sideValue).toBe(80.0);
+      // Team 1 total = rawSum (700) + adjustment (40) = 740
+      // Team 2 total = rawSum (800) + 0 = 800
+      expect(result.team1.sideValue).toBe(740.0);
+      expect(result.team2.sideValue).toBe(800.0);
     });
 
-    it('McMillan / Harrison + Stowers example => Fair trade with valueAdjustment ~2.4 to Team 1', () => {
-      // Team 1 receives: Tetairoa McMillan 73.7
-      // Team 2 receives: Marvin Harrison 51.8, Eli Stowers 23.7
+    it('McMillan / Harrison + Stowers example => Fair trade with valueAdjustment ~23.7 to Team 1', () => {
+      // Team 1 receives: Tetairoa McMillan 737.0
+      // Team 2 receives: Marvin Harrison 518.0, Eli Stowers 237.0
       const result = evaluateTrade({
         leagueType: 'DYN_SF_PPR_TEP',
-        team1: [{ id: 1, name: 'Tetairoa McMillan', value: 73.7 }],
+        team1: [{ id: 1, name: 'Tetairoa McMillan', value: 737.0 }],
         team2: [
-          { id: 2, name: 'Marvin Harrison Jr.', value: 51.8 },
-          { id: 3, name: 'Eli Stowers', value: 23.7 },
+          { id: 2, name: 'Marvin Harrison Jr.', value: 518.0 },
+          { id: 3, name: 'Eli Stowers', value: 237.0 },
         ],
       });
 
-      // Team 1: rawSum 73.7, weighted 73.7, penalty 0.0
-      // Team 2: rawSum 75.5, weighted 51.8 + 23.7*0.9 = 73.13, penalty 2.37
-      // valueAdjustment = 2.37 → rounded to 2.4 to Team 1
+      // Team 1: rawSum 737.0, weighted 737.0, penalty 0.0
+      // Team 2: rawSum 755.0, weighted 518.0 + 237.0*0.9 = 731.3, penalty 23.7
+      // valueAdjustment = 23.7 → to Team 1
       expect(result.valueAdjustmentSide).toBe(1);
-      expect(result.valueAdjustment).toBeCloseTo(2.4, 1);
-      expect(result.team1.adjustment).toBeCloseTo(2.4, 1);
+      expect(result.valueAdjustment).toBeCloseTo(23.7, 1);
+      expect(result.team1.adjustment).toBeCloseTo(23.7, 1);
       expect(result.team2.adjustment).toBe(0);
 
-      // Team 1 total = 73.7 + 2.4 = 76.1
-      // Team 2 total = 75.5
-      expect(result.team1.sideValue).toBe(76.1);
-      expect(result.team2.sideValue).toBe(75.5);
+      // Team 1 total = 737.0 + 23.7 = 760.7
+      // Team 2 total = 755.0
+      expect(result.team1.sideValue).toBe(760.7);
+      expect(result.team2.sideValue).toBe(755.0);
 
-      // diff = 0.6 → Fair trade (same as old weighted math: 73.7 vs 73.13)
+      // diff = 5.7 → lean 0.00376 → scale 1 → Fair trade
       expect(result.verdict).toBe('Fair trade');
     });
 
     it('adding a piece to either side changes the adjustment (not static)', () => {
       const base = evaluateTrade({
         leagueType: 'DYN_SF_PPR_TEP',
-        team1: [{ id: 1, name: 'A', value: 70.0 }],
+        team1: [{ id: 1, name: 'A', value: 700.0 }],
         team2: [
-          { id: 2, name: 'B', value: 40.0 },
-          { id: 3, name: 'C', value: 40.0 },
+          { id: 2, name: 'B', value: 400.0 },
+          { id: 3, name: 'C', value: 400.0 },
         ],
       });
 
@@ -367,23 +367,23 @@ describe('value.ts', () => {
       const withExtraOnTeam1 = evaluateTrade({
         leagueType: 'DYN_SF_PPR_TEP',
         team1: [
-          { id: 1, name: 'A', value: 70.0 },
-          { id: 4, name: 'D', value: 10.0 },
+          { id: 1, name: 'A', value: 700.0 },
+          { id: 4, name: 'D', value: 100.0 },
         ],
         team2: [
-          { id: 2, name: 'B', value: 40.0 },
-          { id: 3, name: 'C', value: 40.0 },
+          { id: 2, name: 'B', value: 400.0 },
+          { id: 3, name: 'C', value: 400.0 },
         ],
       });
 
       // Add a small piece to Team 2
       const withExtraOnTeam2 = evaluateTrade({
         leagueType: 'DYN_SF_PPR_TEP',
-        team1: [{ id: 1, name: 'A', value: 70.0 }],
+        team1: [{ id: 1, name: 'A', value: 700.0 }],
         team2: [
-          { id: 2, name: 'B', value: 40.0 },
-          { id: 3, name: 'C', value: 40.0 },
-          { id: 4, name: 'D', value: 10.0 },
+          { id: 2, name: 'B', value: 400.0 },
+          { id: 3, name: 'C', value: 400.0 },
+          { id: 4, name: 'D', value: 100.0 },
         ],
       });
 
@@ -398,19 +398,19 @@ describe('value.ts', () => {
       // but the VERDICT band must be identical. If any verdict changes, there's a bug.
       const fixtures = [
         // 1-for-1
-        { team1: [{ value: 80 }], team2: [{ value: 78 }] },
+        { team1: [{ value: 800 }], team2: [{ value: 780 }] },
         // 1-for-2
-        { team1: [{ value: 90 }], team2: [{ value: 50 }, { value: 45 }] },
+        { team1: [{ value: 900 }], team2: [{ value: 500 }, { value: 450 }] },
         // 2-for-2
-        { team1: [{ value: 75 }, { value: 65 }], team2: [{ value: 70 }, { value: 70 }] },
+        { team1: [{ value: 750 }, { value: 650 }], team2: [{ value: 700 }, { value: 700 }] },
         // 1-for-3
-        { team1: [{ value: 95 }], team2: [{ value: 55 }, { value: 55 }, { value: 55 }] },
+        { team1: [{ value: 950 }], team2: [{ value: 550 }, { value: 550 }, { value: 550 }] },
         // 2-for-3
-        { team1: [{ value: 85 }, { value: 75 }], team2: [{ value: 60 }, { value: 60 }, { value: 50 }] },
+        { team1: [{ value: 850 }, { value: 750 }], team2: [{ value: 600 }, { value: 600 }, { value: 500 }] },
         // 3-for-3
-        { team1: [{ value: 70 }, { value: 65 }, { value: 60 }], team2: [{ value: 68 }, { value: 63 }, { value: 58 }] },
+        { team1: [{ value: 700 }, { value: 650 }, { value: 600 }], team2: [{ value: 680 }, { value: 630 }, { value: 580 }] },
         // Unbalanced: 1-for-4
-        { team1: [{ value: 90 }], team2: [{ value: 40 }, { value: 35 }, { value: 30 }, { value: 25 }] },
+        { team1: [{ value: 900 }], team2: [{ value: 400 }, { value: 350 }, { value: 300 }, { value: 250 }] },
       ];
 
       for (const fixture of fixtures) {
@@ -447,6 +447,57 @@ describe('value.ts', () => {
         // New math must produce identical VERDICT
         const newVerdictBase = result.verdict.split(' — ')[0]; // Remove " — Team X" suffix
         expect(newVerdictBase).toBe(oldVerdict);
+      }
+    });
+
+    it('scale invariance of verdicts: evaluateTrade(values) and evaluateTrade(values × 10) produce identical verdict and scale', () => {
+      // The trade calculator derives everything from lean = diff / total, a ratio.
+      // Multiply every input value by 10 → diff and total both scale by 10 → lean unchanged.
+      // Verdict and scale must be identical.
+      const fixtures = [
+        // 1-for-1
+        { team1: [{ value: 80 }], team2: [{ value: 78 }] },
+        // 1-for-2
+        { team1: [{ value: 90 }], team2: [{ value: 50 }, { value: 45 }] },
+        // 2-for-2
+        { team1: [{ value: 75 }, { value: 65 }], team2: [{ value: 70 }, { value: 70 }] },
+        // 1-for-3
+        { team1: [{ value: 95 }], team2: [{ value: 55 }, { value: 55 }, { value: 55 }] },
+        // 2-for-3
+        { team1: [{ value: 85 }, { value: 75 }], team2: [{ value: 60 }, { value: 60 }, { value: 50 }] },
+        // 3-for-3
+        { team1: [{ value: 70 }, { value: 65 }, { value: 60 }], team2: [{ value: 68 }, { value: 63 }, { value: 58 }] },
+        // Unbalanced: 1-for-4
+        { team1: [{ value: 90 }], team2: [{ value: 40 }, { value: 35 }, { value: 30 }, { value: 25 }] },
+      ];
+
+      for (const fixture of fixtures) {
+        const team1Assets = fixture.team1.map((v, i) => ({ id: i + 1, name: `T1-${i}`, value: v.value }));
+        const team2Assets = fixture.team2.map((v, i) => ({ id: i + 100, name: `T2-${i}`, value: v.value }));
+
+        const result1 = evaluateTrade({
+          leagueType: 'DYN_SF_PPR_TEP',
+          team1: team1Assets,
+          team2: team2Assets,
+        });
+
+        // Scale values by 10
+        const scaledTeam1Assets = team1Assets.map(a => ({ ...a, value: a.value * 10 }));
+        const scaledTeam2Assets = team2Assets.map(a => ({ ...a, value: a.value * 10 }));
+
+        const result10 = evaluateTrade({
+          leagueType: 'DYN_SF_PPR_TEP',
+          team1: scaledTeam1Assets,
+          team2: scaledTeam2Assets,
+        });
+
+        // Verdict must be identical
+        const verdict1 = result1.verdict.split(' — ')[0];
+        const verdict10 = result10.verdict.split(' — ')[0];
+        expect(verdict10).toBe(verdict1);
+
+        // Scale must be identical (since lean is scale-invariant)
+        expect(result10.scale).toBe(result1.scale);
       }
     });
   });
@@ -656,27 +707,27 @@ describe('value.ts', () => {
   });
 
   describe('computeAgeNudge', () => {
-    it('RB age 27+ gets -0.05', () => {
-      expect(computeAgeNudge('RB', 27)).toBe(-0.05);
-      expect(computeAgeNudge('RB', 30)).toBe(-0.05);
+    it('RB age 27+ gets -0.5', () => {
+      expect(computeAgeNudge('RB', 27)).toBe(-0.5);
+      expect(computeAgeNudge('RB', 30)).toBe(-0.5);
     });
 
     it('RB age 26 gets 0', () => {
       expect(computeAgeNudge('RB', 26)).toBe(0);
     });
 
-    it('WR age 30+ gets -0.03', () => {
-      expect(computeAgeNudge('WR', 30)).toBe(-0.03);
-      expect(computeAgeNudge('WR', 33)).toBe(-0.03);
+    it('WR age 30+ gets -0.3', () => {
+      expect(computeAgeNudge('WR', 30)).toBe(-0.3);
+      expect(computeAgeNudge('WR', 33)).toBe(-0.3);
     });
 
-    it('TE age 30+ gets -0.03', () => {
-      expect(computeAgeNudge('TE', 30)).toBe(-0.03);
-      expect(computeAgeNudge('TE', 32)).toBe(-0.03);
+    it('TE age 30+ gets -0.3', () => {
+      expect(computeAgeNudge('TE', 30)).toBe(-0.3);
+      expect(computeAgeNudge('TE', 32)).toBe(-0.3);
     });
 
-    it('QB age 36+ gets -0.03', () => {
-      expect(computeAgeNudge('QB', 36)).toBe(-0.03);
+    it('QB age 36+ gets -0.3', () => {
+      expect(computeAgeNudge('QB', 36)).toBe(-0.3);
     });
 
     it('QB age 35 gets 0', () => {

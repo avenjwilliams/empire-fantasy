@@ -1,4 +1,4 @@
-/** Rank-to-value decay constant. Tuned so rank 1 ≈ 100, rank ~50 ≈ 65, rank ~200 ≈ 15 */
+/** Rank-to-value decay constant. Tuned so rank 1 ≈ 1000, rank ~50 ≈ 650, rank ~200 ≈ 150 */
 export const RANK_DECAY_K = 3.5;
 
 /** Scoring multipliers applied at seed time to expand 4 base sets → 24 */
@@ -8,13 +8,13 @@ export const SCORING_MULTIPLIERS = {
   TEP: { QB: 1.0, RB: 1.0, WR: 1.0, TE: 1.12 },
 } as const;
 
-/** Default pick values for dynasty seeding (1QB baseline) */
+/** Default pick values for dynasty seeding (1QB baseline) — ×10 for 1–1000 scale */
 export const PICK_VALUES: Record<string, number> = {
   // next-year (year offset 1)
-  '1_1_EARLY': 65, '1_1_MID': 55, '1_1_LATE': 45,
-  '1_2_EARLY': 32, '1_2_MID': 27, '1_2_LATE': 23,
-  '1_3_EARLY': 15, '1_3_MID': 12, '1_3_LATE': 10,
-  '1_4_EARLY': 6,  '1_4_MID': 5,  '1_4_LATE': 4,
+  '1_1_EARLY': 650, '1_1_MID': 550, '1_1_LATE': 450,
+  '1_2_EARLY': 320, '1_2_MID': 270, '1_2_LATE': 230,
+  '1_3_EARLY': 150, '1_3_MID': 120, '1_3_LATE': 100,
+  '1_4_EARLY': 60,  '1_4_MID': 50,  '1_4_LATE': 40,
 };
 
 /** Per-year-further-out decay for picks */
@@ -71,25 +71,25 @@ export const STAT_CAP: Record<string, number> = {
   DYN: 0.4,
 };
 
-/** Age nudges for dynasty sets (per week, DYN only) */
+/** Age nudges for dynasty sets (per week, DYN only) — ×10 for 1–1000 scale */
 export const AGE_NUDGE: Record<string, { minAge: number; nudge: number }> = {
-  RB: { minAge: 27, nudge: -0.05 },
-  WR: { minAge: 30, nudge: -0.03 },
-  TE: { minAge: 30, nudge: -0.03 },
-  QB: { minAge: 36, nudge: -0.03 },
+  RB: { minAge: 27, nudge: -0.5 },
+  WR: { minAge: 30, nudge: -0.3 },
+  TE: { minAge: 30, nudge: -0.3 },
+  QB: { minAge: 36, nudge: -0.3 },
 };
 
 /** Minimum value to include in the expectation model */
-export const MIN_VALUE_FOR_EXPECTATION = 5;
+export const MIN_VALUE_FOR_EXPECTATION = 50;
 
 /** Inactive decay: weeks without stats before decay starts */
 export const INACTIVE_THRESHOLD_WEEKS = 8;
 
-/** Inactive decay: multiplicative decay rate per week after threshold */
+/** Inactive decay: multiplicative decay rate per week after threshold (15%, scale-invariant) */
 export const INACTIVE_DECAY_RATE = 0.15;
 
-/** Inactive decay: floor value (minimum) */
+/** Inactive decay: floor value (minimum) — matches clampRound floor */
 export const INACTIVE_FLOOR = 1.0;
 
 /** Inactive decay: only decay players above this value */
-export const INACTIVE_MIN_VALUE = 5;
+export const INACTIVE_MIN_VALUE = 50;

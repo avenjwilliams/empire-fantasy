@@ -14,7 +14,7 @@ The original design used a convex transformation to make elite players resist qu
 
 ### Step 1 — linear values (no convex transformation)
 
-Use each asset's raw linear 1–100 score directly. No convex curve transformation applied.
+Use each asset's raw linear 1–1000 score directly. No convex curve transformation applied.
 
 ### Step 2 — depth (roster-spot) discount and Value Adjustment credit
 
@@ -40,7 +40,7 @@ This is algebraically identical to the old weighted-sum math. With `a_i = raw_i 
 Key properties:
 - **Equal piece counts** ⇒ equal penalties ⇒ zero adjustment. Verified for 1-for-1 and 2-for-2 with identical value distributions.
 - **Adjustment reported on Fair trades too** — it's a structural roster-spot correction, not a "someone is losing" signal. Only when both sides have identical depth penalties (e.g., 1-for-1, or 2-for-2 in current weight scheme) is it 0 / null.
-- **valueAdjustment ≠ adviceGap**. `adviceGap` = "add a ~54-value player to even this out" (losing-side additive). `valueAdjustment` = the roster-spot credit. Both exist in the response.
+- **valueAdjustment ≠ adviceGap**. `adviceGap` = "add a ~540-value player to even this out" (losing-side additive). `valueAdjustment` = the roster-spot credit. Both exist in the response.
 
 ### Step 3 — verdict
 
@@ -65,22 +65,22 @@ Map lean to a **display scale from −100 (favors Team 1) to +100 (favors Team 2
 {
   "leagueType": "DYN_SF_PPR_STD",
   "team1": { 
-    "assets": [{"id":1, "name":"...", "value":73.7, "trueValue":74, "weight":1.0}],
-    "sideValue": 76.1,
-    "rawSum": 73.7,
-    "adjustment": 2.4
+    "assets": [{"id":1, "name":"...", "value":737.0, "trueValue":737, "weight":1.0}],
+    "sideValue": 760.7,
+    "rawSum": 737.0,
+    "adjustment": 23.7
   },
   "team2": { 
-    "assets": [{"id":2, "name":"...", "value":51.8, "trueValue":52, "weight":1.0}, {"id":3, "name":"...", "value":23.7, "trueValue":24, "weight":0.9}],
-    "sideValue": 75.5,
-    "rawSum": 75.5,
+    "assets": [{"id":2, "name":"...", "value":518.0, "trueValue":518, "weight":1.0}, {"id":3, "name":"...", "value":237.0, "trueValue":237, "weight":0.9}],
+    "sideValue": 755.0,
+    "rawSum": 755.0,
     "adjustment": 0
   },
-  "scale": 0,
+  "scale": 1,
   "verdict": "Fair trade",
   "differencePct": 0.8,
   "adviceGap": null,
-  "valueAdjustment": 2.4,
+  "valueAdjustment": 23.7,
   "valueAdjustmentSide": 1
 }
 ```
@@ -94,18 +94,18 @@ Map lean to a **display scale from −100 (favors Team 1) to +100 (favors Team 2
 
 ### Worked example
 
-Team 1 receives: **Tetairoa McMillan 73.7**  
-Team 2 receives: **Marvin Harrison Jr. 51.8**, **Eli Stowers 23.7**
+Team 1 receives: **Tetairoa McMillan 737.0**  
+Team 2 receives: **Marvin Harrison Jr. 518.0**, **Eli Stowers 237.0**
 
 | | Team 1 | Team 2 |
 |---|---|---|
-| Raw sum | 73.7 | 75.5 |
-| Weighted sum | 73.7 × 1.0 = 73.7 | 51.8 × 1.0 + 23.7 × 0.9 = 73.13 |
-| Depth penalty | 0.0 | 2.37 |
-| Value adjustment | **+2.37 → 2.4** (to Team 1) | 0 |
-| **Total (displayed)** | **76.1** | **75.5** |
+| Raw sum | 737.0 | 755.0 |
+| Weighted sum | 737.0 × 1.0 = 737.0 | 518.0 × 1.0 + 237.0 × 0.9 = 731.3 |
+| Depth penalty | 0.0 | 23.7 |
+| Value adjustment | **+23.7** (to Team 1) | 0 |
+| **Total (displayed)** | **760.7** | **755.0** |
 
-diff = 0.6 → lean = 0.004 → **Fair trade** (same as old: 73.7 vs 73.13)
+diff = 5.7 → lean = 0.00376 → **Fair trade** (same as old: 737.0 vs 731.3)
 
 The adjustment updates as players are added to either side — it is not a static constant.
 
@@ -114,13 +114,13 @@ The adjustment updates as players are added to either side — it is not a stati
 Depth weights, band thresholds — all in one exported `TRADE_CONSTANTS` object in `shared/value.ts`. Unit-test invariants:
 
 1. Equal single players → scale 0, "Fair trade".
-2. One 95 vs three 55s → favors the 95 side (depth weighting only).
-3. One 95 vs three 55s in the other order → symmetric result (sign flips exactly).
-4. Adding a 10-value throw-in to a landslide barely moves the scale.
+2. One 950 vs three 550s → favors the 950 side (depth weighting only).
+3. One 950 vs three 550s in the other order → symmetric result (sign flips exactly).
+4. Adding a 100-value throw-in to a landslide barely moves the scale.
 5. Weights monotone non-increasing.
 6. **Equal piece counts ⇒ valueAdjustment === null on both sides.**
 7. **1-for-2 ⇒ adjustment goes to the one-player side, equals that side's depth-penalty shortfall.**
-8. **McMillan / Harrison+Stowers example ⇒ Fair trade with valueAdjustment ≈ 2.4 to Team 1.**
+8. **McMillan / Harrison+Stowers example ⇒ Fair trade with valueAdjustment ≈ 23.7 to Team 1.**
 9. **Adding a piece to either side changes the adjustment (not static).**
 10. **Adjusted totals produce identical verdict as old weighted-sum math across a table of fixtures (regression guard).**
 

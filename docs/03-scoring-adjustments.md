@@ -2,10 +2,10 @@
 
 ## Principles
 
-- Values are 1.0–100.0, one decimal, per asset per league type.
+- Values are 1.0–1000.0, one decimal, per asset per league type.
 - **Small steps, long horizon.** One vote or one game barely moves a value. Sustained crowd sentiment or repeated performance moves it meaningfully.
 - **Everything is logged.** Every write to `asset_values` is paired with an `adjustment_log` row inside the same transaction.
-- All math lives in pure functions in `shared/value.ts` with unit tests. Helpers: `clampRound(v) = min(100, max(1, round(v*10)/10))`.
+- All math lives in pure functions in `shared/value.ts` with unit tests. Helpers: `clampRound(v) = min(1000, max(1, round(v*10)/10))`.
 
 ## KEEP / TRADE / CUT (vote adjustments)
 
@@ -28,8 +28,8 @@ Two distinct paths, same response shape:
    - With param: validate code via `parseCode()`, resolve to `league_types.id`, error 400 if unknown.
    - Without param: weighted random from `WEIGHTED_CODES` (common codes 2×).
 4. For DYN types: 15% chance to use picks; RED types never use picks (hard rule 5).
-5. Pick anchor asset value ∈ [20, 95], same kind (players or picks).
-6. Find 2 candidates of same kind within ±6.0 (then ±10.0) of anchor, excluding trios seen this session.
+5. Pick anchor asset value ∈ [20, 950], same kind (players or picks).
+6. Find 2 candidates of same kind within ±60.0 (then ±100.0) of anchor, excluding trios seen this session.
 7. Persist prompt; return assets in random display order with name/team/position/age — **not** their values.
 
 ### Skip / reroll (`POST /api/ktc/skip`)
@@ -46,7 +46,7 @@ The vote is an ordering: KEEP > TRADE > CUT. Convert to pairwise Elo-style updat
 For each ordered pair (winner W, loser L) — (keep,trade), (keep,cut), (trade,cut):
 
 ```
-expected = 1 / (1 + 10^((V_L - V_W) / 12))   # 12-point scale: ±6 spread ≈ 24–76% expectation
+expected = 1 / (1 + 10^((V_L - V_W) / 120))   # 120-point scale: ±60 spread ≈ 24–76% expectation
 delta    = K * (1 - expected)                # K = 0.20
 V_W += delta ; V_L -= delta
 ```
@@ -68,7 +68,7 @@ Applied per player per league type after each ingested week. Goal: reward over-p
 
 For a league type and week, compute each position's expected points as a function of current value:
 
-1. Take all active players at the position with value ≥ 5.
+1. Take all active players at the position with value ≥ 50.
 2. Fit expectation by value percentile: `expected_points = position_week_median + slope * (value - position_median_value)`. Simplest robust version: rank players by value, rank week scores, and map by quantile. (Implement the simple quantile-map first; refine later.)
 
 ### Update rule
@@ -83,10 +83,12 @@ delta    = clamp(raw, -CAP, +CAP)      # CAP = 0.8 (RED), 0.4 (DYN)
 
 - Players on bye / did not play: **no adjustment** (never penalize a bye).
 - Injured during game (status change): apply the performance delta but no extra injury penalty in v1 — crowd votes will handle injury sentiment.
-- Dynasty age nudge (DYN sets only, applied with week processing): RB age ≥ 27: −0.05/week; WR/TE age ≥ 30: −0.03/week; QB age ≥ 36: −0.03/week. Logged as part of the same `stat` adjustment's detail.
+- Dynasty age nudge (DYN sets only, applied with week processing): RB age ≥ 27: −0.5/week; WR/TE age ≥ 30: −0.3/week; QB age ≥ 36: −0.3/week. Logged as part of the same `stat` adjustment's detail.
 - Log per player per league type: `reason='stat'`, `detail={"season":2026,"week":3,"pts":24.7,"expected":16.2,"delta":0.6}`.
 
 Season-scale sanity check: a player beating expectations by 1 stddev every week for 17 weeks gains ~6 points (RED) — noticeable, not silly. A breakout beating by 2–3 stddev weekly can climb 15–25 points over a season. That matches the design intent.
+
+**Asymmetry by design:** Vote and stat deltas stay absolute (10× damped relatively on the 1–1000 scale), while age nudges and seeded values scale ×10. This is intentional: crowd noise is dampened, structural drift is preserved.
 
 ## Picks
 

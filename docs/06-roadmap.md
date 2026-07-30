@@ -27,6 +27,7 @@ Done — see Done section.
 
 ## Done
 
+- 2026-07-29 — **Value scale 1–100 → 1–1000**: widened player values from 1.0–100.0 to 1.0–1000.0 (one decimal). Scale invariance preserved in trade calculator (verdict/scale unchanged). Asymmetry: vote/stat deltas stay absolute (10× damped), age nudges and seed values ×10, INACTIVE_DECAY_RATE unchanged (multiplicative). Migration 004_value_scale_1000.sql rebuilds asset_values with new CHECK bound, scales adjustment_log and value_history. ELO_SCALE → 120, clampRound bounds → [1.0, 1000.0], PICK_VALUES ×10, AGE_NUDGE ×10, MIN_VALUE_FOR_EXPECTATION/INACTIVE_MIN_VALUE → 50. Tests updated; all 92 pass.
 - 2026-07-26 — KTC first-visit popup: modal overlay on first visit (localStorage `ef_ktc_seen`), dismissible; KTC tab still available for voluntary votes.
 - 2026-07-26 — Trade calculator math transparency: expandable "show the math" panel with per-asset breakdown (value → trueValue → weight → weighted) and formula explanation.
 - 2026-07-26 — Rankings header sticky fix: `.table-scroll` now has `overflow-y: auto` + `max-height`, `th` sticky `top: 0` within the scroll container.

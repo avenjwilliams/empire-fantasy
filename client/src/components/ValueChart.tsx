@@ -56,7 +56,7 @@ export default function ValueChart({ history, leagueType }: ValueChartProps) {
   const max = Math.max(...values);
   const pad = Math.max((max - min) * 0.15, 1);
   const yMin = Math.max(0, Math.floor(min - pad));
-  const yMax = Math.min(100, Math.ceil(max + pad));
+  const yMax = Math.min(1000, Math.ceil(max + pad));
 
   return (
     <div className="chart-container">

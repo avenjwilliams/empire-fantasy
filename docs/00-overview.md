@@ -21,7 +21,7 @@ Three independent axes plus format:
 | Reception scoring | Full PPR, Half PPR, Zero PPR | `PPR`, `HALF`, `ZERO` |
 | TE Premium (+0.5 PPR for TEs) | On, Off | `TEP`, `STD` |
 
-Code format: `{FORMAT}_{QB}_{REC}_{TEP}` → e.g. `DYN_SF_PPR_TEP`, `RED_1QB_HALF_STD`. 2×2×3×2 = **24 league types**, each with its own complete ranking set (every player has a distinct 1–100 value in each).
+Code format: `{FORMAT}_{QB}_{REC}_{TEP}` → e.g. `DYN_SF_PPR_TEP`, `RED_1QB_HALF_STD`. 2×2×3×2 = **24 league types**, each with its own complete ranking set (every player has a distinct 1–1000 value in each).
 
 Note: TEP is meaningful even with `ZERO` reception scoring (TEs still get +0.5/reception) — keep all 24 combos.
 
@@ -32,7 +32,7 @@ Note: TEP is meaningful even with `ZERO` reception scoring (TEs still get +0.5/r
 
 ## Value system (summary — details in 03)
 
-- Every asset × league type has a **value**: 1.0–100.0, one decimal.
+- Every asset × league type has a **value**: 1.0–1000.0, one decimal.
 - Values change only through logged adjustments: `seed`, `vote`, `stat`, `manual` (CSV import), `decay` (optional pick time-decay).
 - `value_history` snapshots enable "value over time" charts.
 

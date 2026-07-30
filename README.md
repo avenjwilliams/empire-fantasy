@@ -5,7 +5,7 @@ Fantasy football trade calculator with living player rankings that evolve from c
 ## Features
 
 - **Trade Calculator** — Nonlinear value curve with depth penalty, side-by-side comparison, verdict scale, and evener hint.
-- **Living Rankings** — Player values (1-100) across 24 league type configurations (Dynasty/Redraft, 1QB/SF, PPR/Half/Zero, TEP).
+- **Living Rankings** — Player values (1-1000) across 24 league type configurations (Dynasty/Redraft, 1QB/SF, PPR/Half/Zero, TEP).
 - **Keep / Trade / Cut** — Anonymous crowd voting with Elo-style pairwise adjustments. Values shift based on sustained sentiment.
 - **Stat Ingestion** — Weekly NFL stat imports (via Sleeper API) that reward over-performance and penalize under-performance relative to value-based expectations.
 - **Full Audit Log** — Every value change is logged with reason (seed, vote, stat, manual, decay).

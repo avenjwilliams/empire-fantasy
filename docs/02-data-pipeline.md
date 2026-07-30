@@ -29,9 +29,9 @@ All fetch code takes a `--fixtures` flag (or `EF_FIXTURES=1`) that reads these i
 
 1. Pull Sleeper players; filter to QB/RB/WR/TE with an NFL team or notable FA status; insert `players` + `assets` rows. Skip players with no meaningful fantasy relevance (e.g. keep top ~400 by Sleeper search rank to avoid 3,000 dead rows).
 2. Fetch source rankings for the **4 base sets**: `DYN_1QB`, `DYN_SF`, `RED_1QB`, `RED_SF` (PPR baseline).
-3. Convert rank → value 1.0–100.0 with a monotone curve (not linear — the gap between rank 1 and 10 is much bigger than 101 and 110):
-   `value = 100 * exp(-k * (rank - 1) / N)` shaped so rank 1 ≈ 100.0, rank ~50 ≈ 65, rank ~200 ≈ 15, floor 1.0. Tune `k` and document the chosen constants in code.
-4. **Expand 4 base sets → 24 league types** by applying scoring deltas, then re-normalizing to 1–100:
+3. Convert rank → value 1.0–1000.0 with a monotone curve (not linear — the gap between rank 1 and 10 is much bigger than 101 and 110):
+   `value = 1000 * exp(-k * (rank - 1) / N)` shaped so rank 1 ≈ 1000.0, rank ~50 ≈ 650, rank ~200 ≈ 150, floor 1.0. Tune `k` and document the chosen constants in code.
+4. **Expand 4 base sets → 24 league types** by applying scoring deltas, then re-normalizing to 1–1000:
    - `HALF`: WR/TE/pass-catching RB values × ~0.97; `ZERO`: × ~0.93 (position-level multipliers; QBs unchanged).
    - `TEP`: TE values × ~1.12 in TEP sets.
    - These multipliers are **seed-time only** heuristics — after seeding, all 24 sets evolve independently. Constants live in `seedService` config, easy to tweak.
@@ -39,10 +39,10 @@ All fetch code takes a `--fixtures` flag (or `EF_FIXTURES=1`) that reads these i
 
    | Pick | Value |
    |---|---|
-   | next-year Early 1st | 65 | Mid 1st 55 | Late 1st 45 |
-   | Early 2nd 32 | Mid 2nd 27 | Late 2nd 23 |
-   | Early 3rd 15 | Mid 3rd 12 | Late 3rd 10 |
-   | Early 4th 6 | Mid 4th 5 | Late 4th 4 |
+   | next-year Early 1st | 650 | Mid 1st 550 | Late 1st 450 |
+   | Early 2nd 320 | Mid 2nd 270 | Late 2nd 230 |
+   | Early 3rd 150 | Mid 3rd 120 | Late 3rd 100 |
+   | Early 4th 60 | Mid 4th 50 | Late 4th 40 |
 
    Years further out: × 0.95 per additional year.
 6. Write every seeded value to `adjustment_log` with `reason='seed'`, `old_value=new_value` on first insert (delta 0), and take a day-0 `value_history` snapshot.
@@ -54,13 +54,13 @@ One file per league type. Sorted by value desc. Includes picks for DYN files.
 
 ```csv
 asset_id,kind,name,position,team,age,value
-101,player,Justin Jefferson,WR,MIN,27,99.4
-2001,pick,2027 Early 1st,PICK,,,64.2
+101,player,Justin Jefferson,WR,MIN,27,994.0
+2001,pick,2027 Early 1st,PICK,,,642.0
 ```
 
 - `export-rankings.ts`: DB → CSVs (overwrite).
 - `import-rankings.ts`: read CSVs, diff `value` against DB per asset/league type; for each difference, update `asset_values` and log `reason='manual'` with `detail={"file":"DYN_SF_PPR_TEP.csv"}`. Only `value` is writable via CSV; other columns are informational.
-- Print a summary of changes on import. Refuse values outside [1.0, 100.0].
+- Print a summary of changes on import. Refuse values outside [1.0, 1000.0].
 - Both scripts resolve the DB via `DATABASE_PATH` (falling back to the local `empire-fantasy.db`) and the rankings dir via `DATA_DIR` — this is what lets `rankings:import` be run inside the deployed container against the production DB. The Dockerfile bundles `data/rankings/`, `scripts/`, and `server/src` for exactly this. Editing a CSV locally never affects production on its own — see the "Editing rankings manually" runbook in `README.md` for the full commit → deploy → `fly ssh console` sequence.
 
 ## Weekly stat ingestion (scripts/ingest-week.ts)

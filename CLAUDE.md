@@ -9,7 +9,7 @@ Multi-user fantasy football trade calculator with living player rankings that ev
 | `docs/00-overview.md` | Product vision, features, glossary, 24-combo league type matrix |
 | `docs/01-architecture.md` | Stack, project structure, database schema, API routes |
 | `docs/02-data-pipeline.md` | Seeding, CSV format, fixtures, Sleeper API, weekly stat ingestion |
-| `docs/03-scoring-adjustments.md` | 1–100 value system, vote logic (Elo pairwise), performance adjustments, adjustment log |
+| `docs/03-scoring-adjustments.md` | 1–1000 value system, vote logic (Elo pairwise), performance adjustments, adjustment log |
 | `docs/04-trade-calculator.md` | Trade algorithm: convex value curve, depth discount, verdict scale |
 | `docs/05-ui-spec.md` | Screens, components, retro design constraints |
 | `docs/06-roadmap.md` | Deferred features and next steps — check here before proposing new work |
@@ -27,7 +27,7 @@ Multi-user fantasy football trade calculator with living player rankings that ev
 
 ## Hard rules
 
-1. **Player values are 1.0–100.0, one decimal place.** Round with `Math.round(v * 10) / 10` at every write. Clamp to [1.0, 100.0].
+1. **Player values are 1.0–1000.0, one decimal place.** Round with `Math.round(v * 10) / 10` at every write. Clamp to [1.0, 1000.0].
 2. **Every value change writes a row to `adjustment_log`.** No exceptions — seeds, votes, stat updates, manual CSV edits all log.
 3. **SQLite is the source of truth at runtime.** CSVs in `data/rankings/` are the human-editable interface; sync via `npm run rankings:export` / `rankings:import` (import diffs and logs changes as `reason='manual'`).
 4. **League types are the 24-row matrix** in `docs/00-overview.md`. Always reference by `code` (e.g. `DYN_SF_PPR_TEP`). Never hardcode a subset.

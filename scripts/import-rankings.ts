@@ -64,8 +64,8 @@ function main(): void {
           continue;
         }
 
-        if (newValue < 1.0 || newValue > 100.0) {
-          errors.push(`${file}:${i + 1} - value ${newValue} outside [1.0, 100.0]`);
+        if (newValue < 1.0 || newValue > 1000.0) {
+          errors.push(`${file}:${i + 1} - value ${newValue} outside [1.0, 1000.0]`);
           continue;
         }
 

@@ -9,12 +9,14 @@ import {
 // =====================================================
 
 export const VOTE_CONSTANTS = {
-  /** Elo K-factor per pairwise comparison */
+  /** Elo K-factor per pairwise comparison. Deliberately NOT scaled with the
+   *  1–1000 value range: keeping deltas absolute (~0.1–0.2 per pair) is what
+   *  damps individual vote influence to ~1/10 of its old relative weight. */
   K: 0.20,
   /** Dampened K when asset has >30 votes in trailing 7 days */
   K_DAMPENED: 0.10,
-  /** Elo scale divisor (±6 spread ≈ 24–76% expectation) */
-  ELO_SCALE: 12,
+  /** Elo scale divisor (±60 spread ≈ 24–76% expectation on 1–1000 scale) */
+  ELO_SCALE: 120,
   /** Dampening threshold: votes in trailing 7 days */
   DAMPEN_THRESHOLD: 30,
 } as const;
@@ -31,9 +33,9 @@ export const TRADE_CONSTANTS = {
   MAX_ASSETS_PER_SIDE: 15,
 } as const;
 
-/** Clamp value to [1.0, 100.0] and round to one decimal place. */
+/** Clamp value to [1.0, 1000.0] and round to one decimal place. */
 export function clampRound(v: number): number {
-  const clamped = Math.max(1.0, Math.min(100.0, v));
+  const clamped = Math.max(1.0, Math.min(1000.0, v));
   return Math.round(clamped * 10) / 10;
 }
 
@@ -85,7 +87,7 @@ function computeSideBreakdown(linearValues: number[]): { rawSum: number; weighte
  * Compute value adjustment based on depth penalty difference.
  * The side with the SMALLER depth penalty (fewer/more concentrated pieces) gets the credit.
  * Returns { adjustment: number, adjustmentSide: 1 | 2 | null }
- * adjustment is rounded to 1 decimal, clamped to [0, 100].
+ * adjustment is rounded to 1 decimal, range [0, 1000].
  */
 function computeValueAdjustment(
   team1Values: number[],
@@ -102,20 +104,20 @@ function computeValueAdjustment(
 
   // Side with SMALLER penalty gets the credit
   const adjustmentSide = breakdown1.depthPenalty < breakdown2.depthPenalty ? 1 : 2;
-  const adjustment = clampRound(penaltyDiff);
+  const adjustment = round1(penaltyDiff);
 
   return { adjustment, adjustmentSide };
 }
 
 /**
- * Find the linear value (1-100) that would roughly even the trade
+ * Find the linear value (1-1000) that would roughly even the trade
  * when added to the losing side at its next slot weight.
  */
 function computeAdviceGap(diff: number, losingAssetCount: number): number | null {
   const nextWeight = getWeight(losingAssetCount);
   // For linear values, we need v * nextWeight >= |diff|
   const neededValue = Math.abs(diff) / nextWeight;
-  if (neededValue > 100) return null; // No single player can close this gap
+  if (neededValue > 1000) return null; // No single player can close this gap
   return clampRound(neededValue);
 }
 
