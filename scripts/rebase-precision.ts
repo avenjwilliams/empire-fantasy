@@ -15,6 +15,7 @@ import {
   loadSeedRankingsCSV,
   recoverSeedRanks,
   applyScoringMultipliers,
+  CSV_SETS,
   SeedConfig,
   SeedRankingRow,
   Position,
@@ -48,6 +49,34 @@ function oldRankToValue100(rank: number, totalPlayers: number): number {
   const N = totalPlayers;
   const raw = 100 * Math.exp(-RANK_DECAY_K * (rank - 1) / N);
   return clampRound(raw);
+}
+
+/** Clamp at 100-scale (what migration 004 did before ×10) */
+function clampRound100(v: number): number {
+  const clamped = Math.max(1.0, Math.min(100.0, v));
+  return Math.round(clamped * 10) / 10;
+}
+
+/** Apply scoring multipliers at 100-scale (migration 004 behavior), then clampRound100 */
+function applyScoringMultipliers100(baseValue: number, position: Position, leagueType: LeagueType): number {
+  let value = baseValue;
+
+  // Reception scoring adjustment
+  if (leagueType.rec === 'HALF') {
+    const mult = SCORING_MULTIPLIERS.HALF[position as keyof typeof SCORING_MULTIPLIERS.HALF];
+    value *= mult;
+  } else if (leagueType.rec === 'ZERO') {
+    const mult = SCORING_MULTIPLIERS.ZERO[position as keyof typeof SCORING_MULTIPLIERS.ZERO];
+    value *= mult;
+  }
+  // PPR is the baseline, no adjustment
+
+  // TEP adjustment
+  if (leagueType.tep === 1 && position === 'TE') {
+    value *= SCORING_MULTIPLIERS.TEP.TE;
+  }
+
+  return clampRound100(value);
 }
 
 interface LeagueTypeRow {
@@ -88,10 +117,9 @@ async function main(): Promise<void> {
     // --- 1. Recover seed ranks ---
     console.log('\n[1/5] Recovering seed ranks from CSV sources...');
     const dbForRanks = initDb(dbPath);
-    const config: SeedConfig = { fixturesMode: false, dataDir: DATA_DIR };
-    const seedRanks = recoverSeedRanks(dbForRanks, { fixturesMode: false, dataDir: DATA_DIR });
+    const seedRanks = recoverSeedRanks(dbForRanks, config);
     closeDb(dbForRanks);
-    console.log(`  Recovered ranks for ${seedRanks.size} assets`);
+    console.log(`  Recovered ranks for ${seedRanks.size} assets across ${CSV_SETS.length} base sets`);
 
     // --- 2. Read current values ---
     console.log('\n[2/5] Reading current asset values...');
@@ -110,45 +138,66 @@ async function main(): Promise<void> {
       currentByAsset.set(row.asset_id, m);
     }
 
-    // --- 3. For each asset, group by base set and compute precise base per league type ---
+    // --- 3. For each asset, compute precise base per league type ---
     console.log('\n[3/5] Computing rebase deltas...');
 
     // First, compute N per base set from the actual seed CSV row counts
-    const config: SeedConfig = { fixturesMode: false, dataDir: DATA_DIR };
     const baseSetSizes = new Map<string, number>();
-    const CSV_SETS = ['DYN_1QB', 'RED_1QB', 'DYN_SF', 'RED_SF'];
-    for (const setCode of ['DYN_1QB', 'RED_1QB', 'DYN_SF', 'RED_SF']) {
-      const rows = loadSeedRankingsCSV({ fixturesMode: false, dataDir: DATA_DIR }, setCode);
+    for (const setCode of CSV_SETS) {
+      const rows = loadSeedRankingsCSV(config, setCode);
       baseSetSizes.set(setCode, rows.length);
     }
     console.log('  Base set N values:', Object.fromEntries(baseSetSizes));
 
+    // --- Idempotency: load existing rebase adjustment_log entries ---
+    console.log('\n  Loading existing rebase log for idempotency...');
+    const dbForLogs = initDb(dbPath);
+    const rebaseLogs = dbForLogs.prepare(`
+      SELECT asset_id, league_type_id, old_value, detail
+      FROM adjustment_log
+      WHERE reason = 'manual' AND detail LIKE '%"rebase":true%'
+    `).all() as { asset_id: number; league_type_id: number; old_value: number; detail: string }[];
+    closeDb(dbForLogs);
+
+    const rebaseLogMap = new Map<string, number>(); // key: "assetId:leagueTypeId" -> old_value
+    for (const log of rebaseLogs) {
+      rebaseLogMap.set(`${log.asset_id}:${log.league_type_id}`, log.old_value);
+    }
+    console.log(`  Found ${rebaseLogMap.size} existing rebase log entries`);
+
     let touched = 0;
     let unchanged = 0;
     let noRank = 0;
+    let skippedNoRankInBaseSet = 0;
     const deltas: { assetId: number; code: string; old: number; new: number; drift: number; baseBefore: number; baseAfter: number }[] = [];
 
-    for (const [assetId, rankInfo] of seedRanks) {
+    for (const [assetId, baseSetMap] of seedRanks) {
       const currentMap = currentByAsset.get(assetId);
       if (!currentMap) {
         noRank++;
         continue;
       }
 
-      const { rank, position, baseSet } = rankInfo;
-      const N = baseSetSizes.get(baseSet);
-      if (!N) {
-        noRank++;
-        continue;
-      }
-
+      // For each league type this asset has a value for
       for (const [ltId, { value: currentValue, code }] of currentMap) {
         const lt = ltByCode.get(code);
         if (!lt) continue;
 
-        // Only process the league types that match this asset's base set
+        // Determine which base set this league type maps to
         const baseKey = `${lt.format}_${lt.qb}`;
-        if (baseKey !== baseSet) continue;
+        const rankInfo = baseSetMap.get(baseKey);
+        if (!rankInfo) {
+          // Asset doesn't have a rank in this base set (e.g., RED_SF has fewer players)
+          skippedNoRankInBaseSet++;
+          continue;
+        }
+
+        const { rank, position } = rankInfo;
+        const N = baseSetSizes.get(baseKey);
+        if (!N) {
+          noRank++;
+          continue;
+        }
 
         // Compute precise base with 999.9 amplitude
         const preciseBase = rankToValue(rank, N);
@@ -160,19 +209,24 @@ async function main(): Promise<void> {
           tep: lt.tep,
         } as LeagueType);
 
-        // Compute quantized base (what migration 004 produced)
+        // Compute quantized base (what migration 004 produced):
+        // 1. oldRankToValue100 at 100-scale
+        // 2. Apply multipliers at 100-scale, clampRound100
+        // 3. Multiply by 10 (migration 004 did ROUND(value * 10, 1))
         const quantizedBase = oldRankToValue100(rank, N);
-        const quantizedBaseAfter = applyScoringMultipliers(quantizedBase, position, {
+        const quantizedBaseAfter = applyScoringMultipliers100(quantizedBase, position, {
           code: lt.code,
           format: lt.format,
           qb: lt.qb,
           rec: lt.rec,
           tep: lt.tep,
         } as LeagueType);
-        const quantizedBaseFinal = clampRound(quantizedBaseAfter * 10); // This is what migration 004 produced
+        const quantizedBaseFinal = Math.round(quantizedBaseAfter * 100) / 10; // clampRound at 1000-scale after ×10
 
-        // Drift = current - quantizedBase (preserves all accumulated changes)
-        const drift = currentValue - quantizedBaseFinal;
+        // Idempotency: if already rebased, use the pre-rebase old_value as drift basis
+        const logKey = `${assetId}:${ltId}`;
+        const driftBasis = rebaseLogMap.has(logKey) ? rebaseLogMap.get(logKey)! : currentValue;
+        const drift = driftBasis - quantizedBaseFinal;
 
         // New value = preciseBase + drift
         const newValue = clampRound(baseAfter + drift);
@@ -196,7 +250,8 @@ async function main(): Promise<void> {
 
     console.log(`  Assets touched: ${touched}`);
     console.log(`  Assets unchanged: ${unchanged}`);
-    console.log(`  Assets without rank: ${noRank}`);
+    console.log(`  Assets without any rank: ${noRank}`);
+    console.log(`  Assets skipped (no rank in this base set): ${skippedNoRankInBaseSet}`);
 
     // Summary stats
     const wholeCount = deltas.filter(d => Number.isInteger(d.new * 10)).length;
@@ -206,6 +261,14 @@ async function main(): Promise<void> {
     if (deltas.length > 0) {
       const maxDelta = deltas.reduce((max, d) => Math.max(max, Math.abs(d.new - d.old)), 0);
       console.log(`  Max absolute delta: ${maxDelta.toFixed(1)}`);
+      
+      // Idempotency check: no asset should move by more than ~2.0 on re-run
+      if (!dryRun) {
+        const maxReRunDelta = deltas.reduce((max, d) => Math.max(max, Math.abs(d.new - d.old)), 0);
+        if (maxReRunDelta > 2.0) {
+          console.warn(`  WARNING: Max delta ${maxReRunDelta.toFixed(1)} > 2.0 — idempotency may be broken!`);
+        }
+      }
     }
 
     if (dryRun) {

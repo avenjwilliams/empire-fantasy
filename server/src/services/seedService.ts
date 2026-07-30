@@ -14,7 +14,7 @@ import {
 import type { Position, Format, QBSetting, PickTier, RecScoring, TEPSetting } from '@empire-fantasy/shared';
 
 /** Database league type (as stored in DB - tep is 0/1) */
-interface DbLeagueType {
+export interface DbLeagueType {
   id: number;
   code: string;
   format: Format;
@@ -107,7 +107,7 @@ export function loadSleeperPlayers(config: SeedConfig): SleeperPlayer[] {
 
 // ------ Seed Rankings Loading ------
 
-const CSV_SETS = ['DYN_1QB', 'RED_1QB', 'DYN_SF', 'RED_SF'];
+export const CSV_SETS = ['DYN_1QB', 'RED_1QB', 'DYN_SF', 'RED_SF'];
 
 /**
  * Apply the exact same scoring multiplier chain that seedService uses
@@ -139,6 +139,48 @@ export function applyScoringMultipliers(
   return clampRound(value);
 }
 
+/** Clamp value to [1.0, 100.0] and round to one decimal place (100-scale). */
+export function clampRound100(v: number): number {
+  const clamped = Math.max(1.0, Math.min(100.0, v));
+  return Math.round(clamped * 10) / 10;
+}
+
+/** Old rankToValue with 100 amplitude (migration 004 era). */
+export function oldRankToValue100(rank: number, totalPlayers: number): number {
+  const N = totalPlayers;
+  const raw = 100 * Math.exp(-RANK_DECAY_K * (rank - 1) / N);
+  return clampRound100(raw);
+}
+
+/**
+ * Apply scoring multipliers at 100-scale, then clampRound100.
+ * This models what migration 004 did: apply multipliers at 100-scale, round to 0.1, then ×10.
+ */
+export function applyScoringMultipliers100(
+  baseValue: number,
+  position: Position,
+  leagueType: DbLeagueType,
+): number {
+  let value = baseValue;
+
+  // Reception scoring adjustment
+  if (leagueType.rec === 'HALF') {
+    const mult = SCORING_MULTIPLIERS.HALF[position as keyof typeof SCORING_MULTIPLIERS.HALF];
+    value *= mult;
+  } else if (leagueType.rec === 'ZERO') {
+    const mult = SCORING_MULTIPLIERS.ZERO[position as keyof typeof SCORING_MULTIPLIERS.ZERO];
+    value *= mult;
+  }
+  // PPR is the baseline, no adjustment
+
+  // TEP adjustment
+  if (leagueType.tep === 1 && position === 'TE') {
+    value *= SCORING_MULTIPLIERS.TEP.TE;
+  }
+
+  return clampRound100(value);
+}
+
 /**
  * Load seed rankings from CSV for a given base set.
  * Returns the raw rows with rank, name, position, team.
@@ -149,13 +191,13 @@ export function loadSeedRankingsCSV(config: SeedConfig, setCode: string): SeedRa
 
 /**
  * Recover seed ranks for all assets by matching CSV rankings to DB players.
- * Returns a map of assetId -> { rank, position, baseSet }.
- * This is the same logic seedService uses during seeding.
+ * Returns a map of assetId -> Map<baseSet, { rank, position }>.
+ * This captures the rank for each asset in each base set it appears in.
  */
 export function recoverSeedRanks(
   db: Database.Database,
   config: SeedConfig,
-): Map<number, { rank: number; position: Position; baseSet: string }> {
+): Map<number, Map<string, { rank: number; position: Position }>> {
   const csvNameSet = loadCsvNameSet(config);
   const sleeperPlayers = loadSleeperPlayers(config).filter(p =>
     csvNameSet.has(normalizeName(p.full_name))
@@ -170,7 +212,7 @@ export function recoverSeedRanks(
     playersByName.set(key, arr);
   }
 
-  const seedRanks = new Map<number, { rank: number; position: Position; baseSet: string }>();
+  const seedRanks = new Map<number, Map<string, { rank: number; position: Position }>>();
 
   for (const setCode of CSV_SETS) {
     const seedRankings = loadSeedRankings(config, setCode);
@@ -179,8 +221,27 @@ export function recoverSeedRanks(
       if (!playerId) continue;
       const asset = db.prepare('SELECT id FROM assets WHERE player_id = ?').get(playerId) as { id: number } | undefined;
       if (!asset) continue;
-      if (!seedRanks.has(asset.id)) {
-        seedRanks.set(asset.id, { rank: row.rank, position: row.position as Position, baseSet: setCode });
+
+      const assetMap = seedRanks.get(asset.id) || new Map();
+      // Within a single base set, keep first-wins for genuine duplicates
+      if (!assetMap.has(setCode)) {
+        assetMap.set(setCode, { rank: row.rank, position: row.position as Position });
+      }
+      seedRanks.set(asset.id, assetMap);
+
+      // Check position consistency across base sets
+      const existing = seedRanks.get(asset.id)!;
+      if (existing.size > 1) {
+        // Check if this position differs from previously recorded ones
+        for (const [otherSet, { position: otherPos }] of existing) {
+          if (otherSet !== setCode && otherPos !== row.position) {
+            console.warn(
+              `  WARNING [recoverSeedRanks]: Player "${row.name}" (asset ${asset.id}) has different positions: ` +
+              `${otherPos} in ${otherSet} vs ${row.position} in ${setCode}. Keeping first encountered.`
+            );
+            break;
+          }
+        }
       }
     }
   }
