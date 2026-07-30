@@ -1041,6 +1041,120 @@ a:hover { text-decoration: underline; }
   color: var(--ink);
 }
 
+/* ---- Suggestions Panel ---- */
+.suggestions-panel {
+  margin-top: 1rem;
+  padding: 0.75rem 1rem;
+  background: var(--bg-raised);
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.suggestions-panel--empty {
+  margin-top: 1rem;
+  padding: 1rem;
+  background: var(--bg-raised);
+  border: 2px dashed var(--border);
+  border-radius: var(--radius);
+  text-align: center;
+}
+
+.suggestions-panel__title {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom: 0.5rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.suggestion-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.4rem 0.5rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 0.35rem;
+  transition: background 0.1s, border-color 0.1s;
+}
+
+.suggestion-row:last-child {
+  margin-bottom: 0;
+}
+
+.suggestion-row:hover {
+  background: var(--bg-hover);
+  border-color: var(--accent-dim);
+}
+
+.suggestion-row__info {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.suggestion-row__name {
+  font-size: 0.85rem;
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.suggestion-row__team {
+  color: var(--ink-muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.suggestion-row__value {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  color: var(--accent);
+  font-size: 0.85rem;
+  min-width: 5.5ch; /* accommodate up to 999.9 (6 chars) */
+  text-align: right;
+}
+
+.suggestion-row__target {
+  color: var(--ink-muted);
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-family: var(--font-mono);
+}
+
+.suggestion-row__add {
+  background: var(--accent);
+  color: var(--bg);
+  border: none;
+  border-radius: var(--radius);
+  width: 28px;
+  height: 28px;
+  font-family: var(--font-mono);
+  font-size: 1.1rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.suggestion-row__add:hover {
+  background: var(--accent-dim);
+}
+
 /* ---- Responsive ---- */
 
 /* Tablet */

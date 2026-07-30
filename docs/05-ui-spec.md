@@ -28,6 +28,17 @@ Persistent top bar: `EMPIRE FANTASY` wordmark left; tabs: **Calculator · Rankin
   > The adjustment is reverse-engineered from what the lighter side would need added to even the trade, which is why it updates as players are added to either side.
 - **Team header total** must equal chips + adjustment. This is the whole point; if it doesn't add up, the feature has failed.
 - Below: horizontal **trade scale** — a meter from TEAM 1 ←→ TEAM 2 with a needle at `scale` (−100..+100), verdict text ("FAIR TRADE", "CLEAR WIN — TEAM 1"), each side's total, and the "add a ~X-value player to even it" hint.
+- **Players to Even Trade panel** (appears below the scale when `suggestions.length > 0`):
+  - Header label styled like existing section headings ("Players to Even Trade").
+  - One row per suggestion: position badge (reuse `.pos-badge--{POS}` classes), name, team, value, target side indicator (e.g. `→ Team 2`), and a `+` button on the right.
+  - Clicking `+` adds that asset to the indicated side, exactly as if it had been picked from AssetSearch — same state update path, so the trade re-evaluates and the panel refreshes with new suggestions. Do not duplicate the add logic; reuse the handler `AssetSearch`'s `onSelect` already feeds.
+  - Show which side it's for. With both sides populated it's ambiguous otherwise — a small `→ Team 2` marker on the row, or a panel subheading, either is fine.
+  - Keep the existing `adviceGap` text line above the panel. The number and the concrete suggestions complement each other.
+  - **Retro terminal theme only** (docs/05-ui-spec.md). No new colors outside the existing palette, no rounded-card look borrowed from the KTC screenshot — this is a layout borrow, not a visual restyle.
+  - Values render with `.toFixed(1)`, consistent with the rest of the app, and are now up to 6 characters (999.9) — size the column accordingly.
+- **Empty and edge states**:
+  - **Fair trade** → no panel at all, not an empty panel with a "nothing to suggest" message.
+  - **Verdict is lopsided but no candidate improves it** (possible on an extreme landslide where even the top asset falls short) → render the panel with a single muted line: "No single asset can even this trade." Do not silently hide the panel; the user needs to know the difference between "nothing fits" and "not computed."
 - Expandable **"Show the math"** panel: per-asset breakdown (linear value → curved trueValue → slot weight → weighted contribution), **plus new per-side breakdown showing rawSum, depthPenalty, and adjustment**, and formula caption updated from "linear depth-weighted sum" to describe the credit framing. Toggled via dashed-border button below the verdict.
 - Evaluation auto-runs on every change (debounced); no submit button.
 
@@ -51,4 +62,4 @@ Persistent top bar: `EMPIRE FANTASY` wordmark left; tabs: **Calculator · Rankin
 
 ## Components inventory
 
-`LeagueTypeSelector`, `AssetSearch`, `AssetChip`, `TradeScale`, `VerdictBanner`, `RankingsTable`, `ValueChart` (Recharts line), `KtcCard`, `LogTable`, `ReasonChip`.
+`LeagueTypeSelector`, `AssetSearch`, `AssetChip`, `TradeScale`, `VerdictBanner`, `RankingsTable`, `ValueChart` (Recharts line), `KtcCard`, `LogTable`, `ReasonChip`, `SuggestionsPanel`.

@@ -1,4 +1,4 @@
-import type { TradeAsset, TradeSide, TradeResult, Verdict, Position, RecScoring, TEPSetting, Format } from './types.js';
+import type { TradeAsset, TradeSide, TradeResult, Verdict, Position, RecScoring, TEPSetting, Format, TradeSuggestion } from './types.js';
 import {
   SCORING, REC_BONUS, TEP_BONUS,
   STAT_SENSITIVITY, STAT_CAP, AGE_NUDGE,
@@ -228,7 +228,180 @@ export function evaluateTrade(input: EvaluateTradeInput): TradeResult {
     adviceGap,
     valueAdjustment,
     valueAdjustmentSide,
+    suggestions: [], // Will be populated by the server route after fetching candidates
   };
+}
+
+/**
+ * Compute trade suggestions — concrete assets that would move the trade toward Fair.
+ * This is called by the server route after fetching candidate assets from the DB.
+ */
+
+export interface TradeSuggestionInput {
+  /** The league type code (e.g., "DYN_SF_PPR_STD") */
+  leagueType: string;
+  /** Current team 1 assets (already on the trade) */
+  team1: { id: number; name: string; value: number; position: string; team: string | null; kind: string }[];
+  /** Current team 2 assets (already on the trade) */
+  team2: { id: number; name: string; value: number; position: string; team: string | null; kind: string }[];
+  /** Candidate assets from the DB (already filtered to have values for this league type) */
+  candidates: { id: number; name: string; value: number; position: string; team: string | null; kind: string }[];
+  /** The initial trade evaluation result (to get lean, verdict, etc.) */
+  initialResult: {
+    diff: number;
+    total: number;
+    lean: number;
+    verdict: string;
+    team1Length: number;
+    team2Length: number;
+  };
+}
+
+/**
+ * Simulate adding each candidate asset to the losing side and score by |lean_after|.
+ * Returns up to 3 best suggestions, position-diverse.
+ */
+export function computeTradeSuggestions(input: TradeSuggestionInput): TradeSuggestion[] {
+  const { team1, team2, candidates, initialResult } = input;
+  
+  // Return empty for Fair trades
+  if (initialResult.verdict === 'Fair trade') {
+    return [];
+  }
+
+  const { diff, total, lean, team1Length, team2Length } = initialResult;
+  const leanBefore = Math.abs(lean);
+  
+  // Determine which side is losing (the side that would receive the asset)
+  // diff > 0 means Team 1 gives more value, so Team 2 is losing
+  // diff < 0 means Team 2 gives more value, so Team 1 is losing
+  const losingSide = diff > 0 ? 2 : 1;
+  const losingTeam = losingSide === 1 ? team1 : team2;
+  const winningTeam = losingSide === 1 ? team2 : team1;
+  
+  const excludeIds = new Set([...team1.map(a => a.id), ...team2.map(a => a.id)]);
+
+  // Filter candidates: exclude already-in-trade assets, and for RED league types exclude picks
+  const isRedLeague = input.leagueType.startsWith('RED_');
+  const validCandidates = candidates.filter(c => {
+    if (excludeIds.has(c.id)) return false;
+    if (isRedLeague && c.kind === 'pick') return false;
+    return true;
+  });
+
+  if (validCandidates.length === 0) {
+    return [];
+  }
+
+  // Pre-narrow candidate pool for performance using adviceGap if available
+  // We use ±40% around adviceGap as a rough filter, but widen if too few candidates
+  // Note: adviceGap might be null if no single asset can close the gap
+  let candidatePool = validCandidates;
+  if (initialResult.lean !== 0 && initialResult.verdict !== 'Fair trade') {
+    // We don't have adviceGap here, but we can estimate from the diff
+    // The target value to add is roughly |diff| / nextWeight
+    const nextWeight = getWeight(losingTeam.length);
+    const estimatedTarget = Math.abs(diff) / nextWeight;
+    const narrowPool = validCandidates.filter(c => 
+      c.value >= estimatedTarget * 0.6 && c.value <= estimatedTarget * 1.4
+    );
+    // If narrowed pool is too small, use wider pool or all candidates
+    candidatePool = narrowPool.length >= 20 ? narrowPool : validCandidates;
+  }
+
+  // Simulate each candidate
+  interface SimResult {
+    candidate: typeof validCandidates[0];
+    leanAfter: number;
+    verdictAfter: string;
+  }
+
+  const simulations: SimResult[] = [];
+  
+  for (const candidate of candidatePool) {
+    // Build hypothetical teams with candidate added to losing side
+    const newLosingTeam = [...losingTeam, candidate];
+    const newWinningTeam = [...winningTeam];
+    
+    // Re-evaluate the trade with the new asset
+    // We need to construct the full trade input and evaluate
+    const hypoTeam1 = losingSide === 1 ? newLosingTeam : newWinningTeam;
+    const hypoTeam2 = losingSide === 2 ? newLosingTeam : newWinningTeam;
+    
+    const hypoResult = evaluateTrade({
+      leagueType: input.leagueType,
+      team1: hypoTeam1,
+      team2: hypoTeam2,
+    });
+    
+    const leanAfter = Math.abs(hypoResult.scale) / TRADE_CONSTANTS.SCALE_MULTIPLIER;
+    // Actually, lean = diff / total, so let's compute it properly
+    const diffAfter = hypoResult.team1.sideValue - hypoResult.team2.sideValue;
+    const totalAfter = hypoResult.team1.sideValue + hypoResult.team2.sideValue;
+    const leanValueAfter = diffAfter / Math.max(totalAfter, 1);
+    const absLeanAfter = Math.abs(leanValueAfter);
+    
+    // Only keep candidates that improve the trade (reduce |lean|)
+    if (absLeanAfter < leanBefore) {
+      simulations.push({
+        candidate,
+        leanAfter: absLeanAfter,
+        verdictAfter: hypoResult.verdict.split(' — ')[0], // base verdict
+      });
+    }
+  }
+
+  if (simulations.length === 0) {
+    return [];
+  }
+
+  // Group by position
+  const byPosition = new Map<string, SimResult[]>();
+  for (const sim of simulations) {
+    const pos = sim.candidate.position;
+    const arr = byPosition.get(pos) || [];
+    arr.push(sim);
+    byPosition.set(pos, arr);
+  }
+
+  // Pick best from each position group
+  const groupWinners: SimResult[] = [];
+  for (const [, group] of byPosition) {
+    // Sort group by leanAfter ascending (best fit first)
+    group.sort((a, b) => a.leanAfter - b.leanAfter);
+    groupWinners.push(group[0]);
+  }
+
+  // Sort group winners by leanAfter
+  groupWinners.sort((a, b) => a.leanAfter - b.leanAfter);
+
+  // Take top 3 group winners
+  const selected = groupWinners.slice(0, 3);
+
+  // If fewer than 3 groups produced winners, backfill from remaining simulations
+  if (selected.length < 3) {
+    const usedIds = new Set(selected.map(s => s.candidate.id));
+    const remaining = simulations
+      .filter(s => !usedIds.has(s.candidate.id))
+      .sort((a, b) => a.leanAfter - b.leanAfter);
+    
+    for (const sim of remaining) {
+      if (selected.length >= 3) break;
+      selected.push(sim);
+    }
+  }
+
+  // Map to TradeSuggestion format
+  return selected.map(s => ({
+    id: s.candidate.id,
+    name: s.candidate.name,
+    position: s.candidate.position as Position | 'PICK',
+    team: s.candidate.team,
+    value: s.candidate.value,
+    side: losingSide,
+    resultingLean: s.leanAfter,
+    resultingVerdict: s.verdictAfter,
+  }));
 }
 
 // =====================================================

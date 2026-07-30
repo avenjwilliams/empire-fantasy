@@ -161,6 +161,54 @@ GET  /api/log?assetId=&leagueType=&limit=                  # adjustment log brow
 
 Trade evaluation is **stateless** (no DB write) — it reads current values and computes.
 
+### POST /api/trade/evaluate
+
+**Request:**
+```json
+{
+  "leagueType": "DYN_SF_PPR_TEP",
+  "team1": [1, 2, 3],
+  "team2": [4, 5]
+}
+```
+
+**Response (extends `TradeResult` from `shared/types.ts`):**
+```json
+{
+  "leagueType": "DYN_SF_PPR_TEP",
+  "team1": { "assets": [...], "sideValue": 760.7, "rawSum": 737.0, "adjustment": 23.7 },
+  "team2": { "assets": [...], "sideValue": 755.0, "rawSum": 755.0, "adjustment": 0 },
+  "scale": 1,
+  "verdict": "Fair trade",
+  "differencePct": 0.8,
+  "adviceGap": null,
+  "valueAdjustment": 23.7,
+  "valueAdjustmentSide": 1,
+  "suggestions": [
+    {
+      "id": 42,
+      "name": "Player Name",
+      "position": "WR",
+      "team": "LAR",
+      "value": 540.3,
+      "side": 2,
+      "resultingLean": 0.012,
+      "resultingVerdict": "Slight edge"
+    }
+  ]
+}
+```
+
+**Changes from previous version:**
+- **Empty side validation relaxed**: only rejects when **both** sides are empty (400: "At least one team needs an asset"). One empty side is now allowed — dropping in one player and immediately seeing what it takes to match him is the most natural first interaction.
+- **`suggestions` field added** (always present, empty array when verdict is "Fair trade" or no candidate improves the trade). Each suggestion is a concrete asset that, when added to the losing side, reduces `|lean|`. See [04-trade-calculator.md](./04-trade-calculator.md#selection-algorithm-simulate-dont-filter) for the selection algorithm.
+
+**Validation (unchanged except empty-side):**
+- Unknown league type → 400
+- Max 15 assets per side → 400
+- Duplicate asset on both sides → 400
+- Picks in Redraft league types → 400
+
 ## Sessions & rate limiting
 
 - Middleware sets `ef_session` UUID cookie if absent; upserts `sessions` row.

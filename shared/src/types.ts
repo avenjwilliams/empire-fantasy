@@ -85,6 +85,20 @@ export interface TradeInput {
 
 export type Verdict = 'Fair trade' | 'Slight edge' | 'Clear win' | 'Landslide';
 
+export interface TradeSuggestion {
+  id: number;
+  name: string;
+  position: Position | 'PICK';
+  team: string | null;
+  value: number;
+  /** Which side this asset should be added to. */
+  side: 1 | 2;
+  /** |lean| after adding this asset — lower is a closer fit. */
+  resultingLean: number;
+  /** Verdict this asset would produce. */
+  resultingVerdict: string;
+}
+
 export interface TradeResult {
   leagueType: string;
   team1: TradeSide;
@@ -99,4 +113,7 @@ export interface TradeResult {
   valueAdjustment: number | null;
   /** Side receiving the valueAdjustment (1 or 2), or null if zero. */
   valueAdjustmentSide: 1 | 2 | null;
+  /** Up to 3 assets that would move the trade toward Fair, closest fit first.
+   *  Empty when the verdict is already Fair trade. */
+  suggestions: TradeSuggestion[];
 }

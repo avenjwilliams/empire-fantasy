@@ -11,6 +11,7 @@ Living list of deferred features and next steps. Add new items here; move finish
 - **League import from Sleeper** — pull a real league's rosters so users can evaluate trades with their actual teams.
 - **Light/dark theme toggle.**
 - **Top-asset ceiling pinning** — rank 1 seeds at 999.9 against a 1000.0 clamp, so the #1 asset has ~0.1 of upside (one vote) and the crowd can only move it down. Options to weigh later: lower the curve amplitude to reserve real headroom, or make the clamp ceiling soft.
+- **Multi-asset trade suggestions** — when no single asset can close the gap, suggest 2-asset packages that would even the trade. Build on the existing single-asset simulation infrastructure.
 
 ## Next steps
 

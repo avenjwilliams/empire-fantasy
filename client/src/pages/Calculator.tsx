@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useLeagueType } from '../context/LeagueTypeContext.js';
 import AssetSearch from '../components/AssetSearch.js';
 import TradeScale from '../components/TradeScale.js';
-import { getWeight } from '@empire-fantasy/shared';
+import { getWeight, computeTradeSuggestions, type TradeSuggestion } from '@empire-fantasy/shared';
 
 interface SelectedAsset {
   asset_id: number;
@@ -37,6 +37,7 @@ interface TradeResult {
   adviceGap: number | null;
   valueAdjustment: number | null;
   valueAdjustmentSide: 1 | 2 | null;
+  suggestions: TradeSuggestion[];
 }
 
 export default function Calculator() {
@@ -252,6 +253,47 @@ export default function Calculator() {
               </span>
             )}
           </div>
+
+          {/* Trade Suggestions Panel */}
+          {result.suggestions && result.suggestions.length > 0 && (
+            <div className="suggestions-panel">
+              <h3 className="suggestions-panel__title">Players to Even Trade</h3>
+              {result.suggestions.map((suggestion, index) => (
+                <div key={suggestion.id} className="suggestion-row">
+                  <div className="suggestion-row__info">
+                    <span className={`pos-badge pos-badge--${suggestion.position}`}>{suggestion.position}</span>
+                    <span className="suggestion-row__name">{suggestion.name}</span>
+                    {suggestion.team && (
+                      <span className="suggestion-row__team">{suggestion.team}</span>
+                    )}
+                    <span className="suggestion-row__value">{suggestion.value.toFixed(1)}</span>
+                    <span className="suggestion-row__target">
+                      &rarr; Team {suggestion.side}
+                    </span>
+                  </div>
+                  <button
+                    className="suggestion-row__add"
+                    onClick={() => addToTeam(suggestion.side)({
+                      asset_id: suggestion.id,
+                      name: suggestion.name,
+                      position: suggestion.position,
+                      team: suggestion.team,
+                      value: suggestion.value,
+                    })}
+                    title={`Add ${suggestion.name} to Team ${suggestion.side}`}
+                  >
+                    +
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {result.suggestions && result.suggestions.length === 0 && result.verdict !== 'Fair trade' && (
+            <div className="suggestions-panel suggestions-panel--empty">
+              <span className="text-muted">No single asset can even this trade.</span>
+            </div>
+          )}
 
           <button
             className="math-toggle"

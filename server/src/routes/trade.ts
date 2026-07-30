@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { getDb } from '../db/db.js';
-import { evaluateTrade, TRADE_CONSTANTS } from '@empire-fantasy/shared';
+import { evaluateTrade, computeTradeSuggestions, TRADE_CONSTANTS } from '@empire-fantasy/shared';
+import type { TradeSuggestion } from '@empire-fantasy/shared';
 
 const router = Router();
 
@@ -26,8 +27,9 @@ router.post('/evaluate', (req, res) => {
     return;
   }
 
-  if (team1.length === 0 || team2.length === 0) {
-    res.status(400).json({ error: 'Both teams need at least one asset' });
+  // Relaxed: reject only when BOTH sides are empty
+  if (team1.length === 0 && team2.length === 0) {
+    res.status(400).json({ error: 'At least one team needs an asset' });
     return;
   }
 
@@ -65,18 +67,21 @@ router.post('/evaluate', (req, res) => {
     return db.prepare(`
       SELECT
         a.id,
+        a.kind,
         CASE
           WHEN a.kind = 'player' THEN p.name
           WHEN a.kind = 'pick' THEN (pk.season || ' ' || pk.tier || ' ' ||
             CASE pk.round WHEN 1 THEN '1st' WHEN 2 THEN '2nd' WHEN 3 THEN '3rd' WHEN 4 THEN '4th' END)
         END as name,
+        CASE WHEN a.kind = 'player' THEN p.position ELSE 'PICK' END as position,
+        p.team,
         av.value
       FROM assets a
       LEFT JOIN players p ON a.player_id = p.id
       LEFT JOIN picks pk ON a.pick_id = pk.id
       JOIN asset_values av ON av.asset_id = a.id AND av.league_type_id = ?
       WHERE a.id IN (${placeholders})
-    `).all(lt.id, ...ids) as { id: number; name: string; value: number }[];
+    `).all(lt.id, ...ids) as { id: number; kind: string; name: string; position: string; team: string | null; value: number }[];
   };
 
   const t1Assets = fetchAssets(team1);
@@ -88,13 +93,55 @@ router.post('/evaluate', (req, res) => {
     return;
   }
 
-  const result = evaluateTrade({
+  const initialResult = evaluateTrade({
     leagueType,
     team1: t1Assets,
     team2: t2Assets,
   });
 
-  res.json(result);
+  // --- Compute suggestions ---
+  // Fetch all candidate assets that have values for this league type
+  const candidateAssets = db.prepare(`
+    SELECT
+      a.id,
+      a.kind,
+      CASE
+        WHEN a.kind = 'player' THEN p.name
+        WHEN a.kind = 'pick' THEN (pk.season || ' ' || pk.tier || ' ' ||
+          CASE pk.round WHEN 1 THEN '1st' WHEN 2 THEN '2nd' WHEN 3 THEN '3rd' WHEN 4 THEN '4th' END)
+      END as name,
+      CASE WHEN a.kind = 'player' THEN p.position ELSE 'PICK' END as position,
+      p.team,
+      av.value
+    FROM assets a
+    LEFT JOIN players p ON a.player_id = p.id
+    LEFT JOIN picks pk ON a.pick_id = pk.id
+    JOIN asset_values av ON av.asset_id = a.id AND av.league_type_id = ?
+    WHERE a.id NOT IN (${allIds.map(() => '?').join(',') || '0'})
+  `).all(lt.id, ...allIds) as { id: number; kind: string; name: string; position: string; team: string | null; value: number }[];
+
+  // Compute suggestions using the simulation approach
+  const suggestions = computeTradeSuggestions({
+    leagueType,
+    team1: t1Assets,
+    team2: t2Assets,
+    candidates: candidateAssets,
+    initialResult: {
+      diff: initialResult.team1.sideValue - initialResult.team2.sideValue,
+      total: initialResult.team1.sideValue + initialResult.team2.sideValue,
+      lean: (initialResult.team1.sideValue - initialResult.team2.sideValue) / Math.max(initialResult.team1.sideValue + initialResult.team2.sideValue, 1),
+      verdict: initialResult.verdict,
+      team1Length: t1Assets.length,
+      team2Length: t2Assets.length,
+    },
+  });
+
+  const resultWithSuggestions = {
+    ...initialResult,
+    suggestions,
+  };
+
+  res.json(resultWithSuggestions);
 });
 
 export default router;

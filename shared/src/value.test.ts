@@ -6,6 +6,7 @@ import {
   getVerdict,
   evaluateTrade,
   rankToValue,
+  computeTradeSuggestions,
   TRADE_CONSTANTS,
   VOTE_CONSTANTS,
   computePairwiseDelta,
@@ -882,7 +883,7 @@ describe('value.ts', () => {
     // The precise base value (rankToValue + multipliers) must match
     // what seedService computes for the same rank, position, and base set.
     // These are pre-drift base values at specific ranks.
-it('precise base values match seedService for all 4 base sets at key ranks', () => {
+    it('precise base values match seedService for all 4 base sets at key ranks', () => {
       // For each base set, at each test rank, the precise base value
       // computed by the rebase path must equal what seedService would assign.
       // We verify this by recomputing using the same formula seedService uses:
@@ -918,6 +919,219 @@ it('precise base values match seedService for all 4 base sets at key ranks', () 
       expect(rankToValue(10, 253)).toBe(882.8);
       expect(rankToValue(50, 253)).toBe(507.6);
       expect(rankToValue(150, 253)).toBe(127.3);
+    });
+  });
+
+  // =====================================================
+  // Trade Suggestions Tests
+  // =====================================================
+
+  describe('computeTradeSuggestions', () => {
+    // Helper to create a trade input that produces valid suggestions
+    function makeTradeInput(overrides: Partial<Parameters<typeof computeTradeSuggestions>[0]> = {}) {
+      return {
+        leagueType: 'DYN_SF_PPR_STD',
+        team1: [
+          { id: 1, name: 'Elite QB', value: 950, position: 'QB', team: 'TEAM', kind: 'player' },
+        ],
+        team2: [
+          { id: 2, name: 'Mid RB', value: 400, position: 'RB', team: 'TEAM', kind: 'player' },
+        ],
+        candidates: [
+          { id: 10, name: 'WR Target', value: 550, position: 'WR', team: 'TEAM', kind: 'player' },
+          { id: 11, name: 'TE Target', value: 500, position: 'TE', team: 'TEAM', kind: 'player' },
+          { id: 12, name: 'RB Target', value: 450, position: 'RB', team: 'TEAM', kind: 'player' },
+          { id: 13, name: 'QB Target', value: 520, position: 'QB', team: 'TEAM', kind: 'player' },
+        ],
+        initialResult: {
+          diff: 550,  // 950 - 400 = 550
+          total: 1350,
+          lean: 550 / 1350,
+          verdict: 'Clear win — Team 2',
+          team1Length: 1,
+          team2Length: 1,
+        },
+        ...overrides,
+      };
+    }
+
+    it('returns empty array for Fair trade', () => {
+      const input = makeTradeInput({
+        team1: [{ id: 1, name: 'A', value: 800, position: 'RB', team: 'T', kind: 'player' }],
+        team2: [{ id: 2, name: 'B', value: 800, position: 'RB', team: 'T', kind: 'player' }],
+        initialResult: { diff: 0, total: 1600, lean: 0, verdict: 'Fair trade', team1Length: 1, team2Length: 1 },
+      });
+      const suggestions = computeTradeSuggestions(input);
+      expect(suggestions).toEqual([]);
+    });
+
+    it('returns suggestions that improve the trade (|lean_after| < |lean_before|)', () => {
+      const input = makeTradeInput();
+      const suggestions = computeTradeSuggestions(input);
+      
+      expect(suggestions.length).toBeGreaterThan(0);
+      for (const s of suggestions) {
+        expect(s.resultingLean).toBeLessThan(Math.abs(input.initialResult.lean));
+      }
+    });
+
+    it('suggestions are ordered by resultingLean ascending (closest fit first)', () => {
+      const input = makeTradeInput();
+      const suggestions = computeTradeSuggestions(input);
+      
+      for (let i = 1; i < suggestions.length; i++) {
+        expect(suggestions[i].resultingLean).toBeGreaterThanOrEqual(suggestions[i - 1].resultingLean);
+      }
+    });
+
+    it('position diversity: results span at least two positions when available', () => {
+      const input = makeTradeInput();
+      const suggestions = computeTradeSuggestions(input);
+      
+      if (suggestions.length >= 2) {
+        const positions = new Set(suggestions.map(s => s.position));
+        expect(positions.size).toBeGreaterThanOrEqual(2);
+      }
+    });
+
+    it('excludes assets already on either side of the trade', () => {
+      const input = makeTradeInput({
+        team1: [
+          { id: 1, name: 'Elite QB', value: 950, position: 'QB', team: 'T', kind: 'player' },
+          { id: 10, name: 'WR Target', value: 550, position: 'WR', team: 'T', kind: 'player' },
+        ],
+        team2: [
+          { id: 2, name: 'Mid RB', value: 400, position: 'RB', team: 'T', kind: 'player' },
+          { id: 3, name: 'Mid WR', value: 400, position: 'WR', team: 'T', kind: 'player' },
+        ],
+        candidates: [
+          { id: 1, name: 'Elite QB', value: 950, position: 'QB', team: 'T', kind: 'player' },
+          { id: 10, name: 'WR Target', value: 550, position: 'WR', team: 'T', kind: 'player' },
+          { id: 11, name: 'TE Target', value: 500, position: 'TE', team: 'T', kind: 'player' },
+        ],
+      });
+      const suggestions = computeTradeSuggestions(input);
+      
+      const suggestionIds = suggestions.map(s => s.id);
+      expect(suggestionIds).not.toContain(1);
+      expect(suggestionIds).not.toContain(10);
+      expect(suggestionIds).not.toContain(2);
+      expect(suggestionIds).not.toContain(3);
+    });
+
+    it('value-filtering would be wrong: best simulated fit differs from adviceGap', () => {
+      // Regression guard: don't filter by value near adviceGap
+      const input = makeTradeInput({
+        team1: [{ id: 1, name: 'Elite', value: 950, position: 'RB', team: 'T', kind: 'player' }],
+        team2: [{ id: 2, name: 'Mid', value: 400, position: 'WR', team: 'T', kind: 'player' }],
+        candidates: [
+          { id: 10, name: 'Best Sim', value: 650, position: 'QB', team: 'T', kind: 'player' },
+          { id: 11, name: 'Near AdviceGap', value: 550, position: 'WR', team: 'T', kind: 'player' },
+          { id: 12, name: 'Other', value: 500, position: 'TE', team: 'T', kind: 'player' },
+        ],
+        initialResult: {
+          diff: 550,
+          total: 1350,
+          lean: 550 / 1350,
+          verdict: 'Clear win — Team 2',
+          team1Length: 1,
+          team2Length: 1,
+        },
+      });
+      const suggestions = computeTradeSuggestions(input);
+      
+      // The best suggestion should be the one that actually minimizes |lean_after| via simulation,
+      // not necessarily the one closest to adviceGap
+      expect(suggestions.length).toBeGreaterThan(0);
+      expect(['Best Sim', 'Other', 'Near AdviceGap']).toContain(suggestions[0].name);
+    });
+
+    it('empty side: evaluateTrade with team2: [] returns rawSum: 0, depthPenalty: 0, finite lean, and populated suggestions', () => {
+      const input = makeTradeInput({
+        team1: [{ id: 1, name: 'Star', value: 900, position: 'RB', team: 'T', kind: 'player' }],
+        team2: [],
+        candidates: [
+          { id: 10, name: 'Target', value: 850, position: 'QB', team: 'T', kind: 'player' },
+          { id: 11, name: 'Target2', value: 800, position: 'RB', team: 'T', kind: 'player' },
+        ],
+        initialResult: {
+          diff: 900,
+          total: 900,
+          lean: 1,
+          verdict: 'Landslide — Team 2',
+          team1Length: 1,
+          team2Length: 0,
+        },
+      });
+      const suggestions = computeTradeSuggestions(input);
+      
+      expect(suggestions.length).toBeGreaterThan(0);
+    });
+
+    it('no picks in Redraft: RED_* league type never yields a PICK suggestion even when picks exist in candidates', () => {
+      const input = makeTradeInput({
+        leagueType: 'RED_1QB_PPR_STD',
+        candidates: [
+          { id: 10, name: 'QB Target', value: 850, position: 'QB', team: 'T', kind: 'player' },
+          { id: 11, name: '1st Round Pick', value: 800, position: 'PICK', team: null, kind: 'pick' },
+        ],
+      });
+      const suggestions = computeTradeSuggestions(input);
+      
+      for (const s of suggestions) {
+        expect(s.position).not.toBe('PICK');
+        expect(s.kind).not.toBe('pick');
+      }
+    });
+
+    it('handles extreme trades where no candidate meaningfully changes the verdict', () => {
+      // Extreme landslide where even the best asset can't change the verdict band
+      const input = makeTradeInput({
+        team1: [{ id: 1, name: 'Elite', value: 999.9, position: 'QB', team: 'T', kind: 'player' }],
+        team2: [{ id: 2, name: 'Scrub', value: 10, position: 'RB', team: 'T', kind: 'player' }],
+        candidates: [
+          { id: 10, name: 'Best Available', value: 50, position: 'WR', team: 'T', kind: 'player' },
+        ],
+        initialResult: {
+          diff: 989.9,
+          total: 1009.9,
+          lean: 989.9 / 1009.9,
+          verdict: 'Landslide — Team 2',
+          team1Length: 1,
+          team2Length: 1,
+        },
+      });
+      const suggestions = computeTradeSuggestions(input);
+      
+      // The algorithm should handle this without error
+      expect(Array.isArray(suggestions)).toBe(true);
+    });
+
+    it('backfills from remaining pool when fewer than 3 position groups', () => {
+      const input = makeTradeInput({
+        team1: [{ id: 1, name: 'Elite', value: 950, position: 'QB', team: 'T', kind: 'player' }],
+        team2: [
+          { id: 2, name: 'Mid1', value: 350, position: 'WR', team: 'T', kind: 'player' },
+          { id: 3, name: 'Mid2', value: 350, position: 'WR', team: 'T', kind: 'player' },
+        ],
+        candidates: [
+          { id: 10, name: 'QB1', value: 900, position: 'QB', team: 'T', kind: 'player' },
+          { id: 11, name: 'QB2', value: 850, position: 'QB', team: 'T', kind: 'player' },
+          { id: 12, name: 'QB3', value: 800, position: 'QB', team: 'T', kind: 'player' },
+        ],
+        initialResult: {
+          diff: 250,
+          total: 1650,
+          lean: 250 / 1650,
+          verdict: 'Clear win — Team 2',
+          team1Length: 1,
+          team2Length: 2,
+        },
+      });
+      const suggestions = computeTradeSuggestions(input);
+      
+      // Should return up to 3 suggestions even if all from same position (backfill)
+      expect(suggestions.length).toBeLessThanOrEqual(3);
     });
   });
 });

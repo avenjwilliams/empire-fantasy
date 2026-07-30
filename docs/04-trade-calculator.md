@@ -59,7 +59,7 @@ Map lean to a **display scale from −100 (favors Team 1) to +100 (favors Team 2
 | 0.08–0.18 | Clear win |
 | > 0.18 | Landslide |
 
-### Response shape
+### Response shape (POST /api/trade/evaluate)
 
 ```json
 {
@@ -81,7 +81,19 @@ Map lean to a **display scale from −100 (favors Team 1) to +100 (favors Team 2
   "differencePct": 0.8,
   "adviceGap": null,
   "valueAdjustment": 23.7,
-  "valueAdjustmentSide": 1
+  "valueAdjustmentSide": 1,
+  "suggestions": [
+    {
+      "id": 10,
+      "name": "Justin Jefferson",
+      "position": "WR",
+      "team": "MIN",
+      "value": 920.5,
+      "side": 2,
+      "resultingLean": 0.012,
+      "resultingVerdict": "Fair trade"
+    }
+  ]
 }
 ```
 
@@ -91,6 +103,43 @@ Map lean to a **display scale from −100 (favors Team 1) to +100 (favors Team 2
 - `valueAdjustment`: absolute difference in depth penalties between sides (null when equal)
 - `valueAdjustmentSide`: 1 or 2 (side receiving the credit), or null
 - `adviceGap`: unchanged — linear value needed on losing side at next slot weight to close `|diff|` (null on Fair trade)
+- `suggestions`: up to 3 concrete assets that would move the trade toward Fair, closest fit first. Empty array when verdict is already "Fair trade". See **Trade Suggestions** below.
+
+### Trade Suggestions (Players to Even Trade)
+
+When the verdict is not "Fair trade", the API returns up to three concrete assets that, if added to the losing side, would bring the trade closer to fair. This mirrors Keep Trade Cut's "Players to Even Trade" panel.
+
+#### Selection Algorithm: Simulate, Don't Filter
+
+The obvious implementation — `SELECT ... WHERE value BETWEEN adviceGap * 0.9 AND adviceGap * 1.1` — is **wrong** in this codebase.
+
+Since the value-adjustment refactor, a side's total is `rawSum + adjustment`, where the adjustment derives from the difference in depth penalties between the two sides. Adding an asset to the losing side changes that side's piece count, which changes its depth penalty, which changes **both** sides' adjustments. The arithmetic is not additive, so an asset whose raw value equals `adviceGap` does **not** land the trade on Fair.
+
+KTC's own panel shows this: against a stated target of 6458 their suggestions are 7030, 6820, 6360, and 6353 — spread around the target, not clustered on it.
+
+**Therefore: simulate, don't filter.** For each candidate asset, construct the hypothetical trade with that asset appended to the losing side, run the real `evaluateTrade` on it, and score the candidate by the resulting `|lean|`. This is exact by construction and immune to future changes in the trade math. Cost is trivial — a few hundred candidates of pure arithmetic, no extra queries once the values are loaded.
+
+Use `adviceGap` only to pre-narrow the candidate pool for performance (e.g., assets within ±40% of it), never as the final ranking. If the pool comes back with fewer than ~20 candidates, widen it rather than returning a short list.
+
+#### Selection: Position-Diverse, Best Fit Per Position
+
+Ranking purely by `|lean_after|` tends to return three near-identical WRs. Instead:
+
+1. **Simulate every candidate.** Discard any that makes the trade worse (i.e. `|lean_after| >= |lean_before|`) — adding an asset that widens the gap is never a suggestion.
+2. **Group survivors by position** (QB, RB, WR, TE, and treat PICK as its own group).
+3. **Take the single best candidate** (lowest `|lean_after|`) from each group.
+3. **Sort those group-winners by `|lean_after|` ascending** and return the top 3.
+4. If fewer than 3 groups produced a candidate, backfill from the remaining pool by `|lean_after|` — better to show three suggestions from two positions than to show two.
+
+Return them sorted by `|lean_after|` ascending, so the closest fit is first.
+
+#### Eligibility
+
+- Exclude any asset already on either side of the trade.
+- Exclude assets with no `asset_values` row for the current league type.
+- **Rookie picks are eligible in DYN_* league types and must never be suggested in RED_* — CLAUDE.md hard rule 5.** The existing endpoint already rejects picks in Redraft; the suggestion path needs the same guard, and it's a separate code path so it won't inherit it for free.
+- Suggestions always go to the side that is receiving less (the losing side), which is the side `adviceGap` already refers to.
+- Return no suggestions when the verdict is "Fair trade". Nothing to fix.
 
 ### Worked example
 
@@ -126,7 +175,7 @@ Depth weights, band thresholds — all in one exported `TRADE_CONSTANTS` object 
 
 ## Edge cases
 
-- Empty side → reject with 400 ("both teams need at least one asset").
+- Empty side → reject with 400 **only when both sides are empty**. One empty side is now allowed (see Architecture doc).
 - Picks selected while league type is RED → reject at input (UI hides picks; server validates).
 - Max 15 assets per side.
 - Duplicate asset on both sides → 400.
