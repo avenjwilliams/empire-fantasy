@@ -34,7 +34,7 @@ You own the living value system for Empire Fantasy — the correctness-critical,
 
 ## Hard rules
 
-- Every value write must round with `Math.round(v * 10) / 10` and clamp to [1.0, 100.0].
+- Every value write must round with `Math.round(v * 10) / 10` and clamp to [1.0, 1000.0].
 - Every value change (seed, vote, stat update, manual import) writes a row to `adjustment_log` — no exceptions.
 - Tunable constants (VOTE_CONSTANTS, caps, weights) live only in `shared/src/value.ts`, never as magic numbers elsewhere.
 - Adjustment caps are small by design. A single vote or game must never exceed its documented cap.
