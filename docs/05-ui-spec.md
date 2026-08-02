@@ -49,6 +49,33 @@ Persistent top bar: `EMPIRE FANTASY` wordmark left; tabs: **Calculator · Rankin
 - Row click → Player detail (`/player/:assetId`): metadata, value across **all 24 league types** (compact grid), value-over-time line chart (league type selector), recent adjustment log entries for that player.
 - Virtualize or paginate at 100 rows.
 
+### Player Detail — Boom / Bust Section
+
+Positioned directly below the detail header and above the "Value Across All League Types" grid. This is a player trait, so it belongs with the identity block.
+
+**Visual: two independent full-width tracks, stacked**
+
+```
+BOOM  ███████████░░░░░░░░░░░░░░░░░░░░░░░░  38%
+BUST  ██████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░  21%
+```
+
+- `boomPct` and `bustPct` are generated independently and can sum to more than 100. They are **not** two slices of one pie.
+- Do **not** render as segments of a single 100%-wide bar with an implied "steady" remainder. That visual asserts `boom + bust + steady = 100`, which is false.
+- Instead render two aligned full-width tracks, stacked, each on its own 0–100 scale. Both tracks are the same width and share the same 0–100 baseline, so the bars stay directly comparable while each remains an honest reading of its own number.
+- Beside or above the tracks, show the two numbers as large stat callouts, styled like the existing accent value in `.detail-header` (`font-mono`, bold, large). Label them `BOOM` and `BUST`.
+- Boom uses the existing green (`--positive`, reused from `.delta--pos` / `.pos-badge--RB`); bust uses the existing red (`--negative`, reused from `.delta--neg` / `.pos-badge--QB`). **No new colors.**
+- Retro terminal theme only. Square corners, monospace, no gradients, no rounded cards, no animation on load.
+- CSS classes: `.boom-bust`, `.boom-bust__tracks`, `.boom-bust__track`, `.boom-bust__label-row`, `.boom-bust__label`, `.boom-bust__label--boom`, `.boom-bust__label--bust`, `.boom-bust__value`, `.boom-bust__value--boom`, `.boom-bust__value--bust`, `.boom-bust__bar`, `.boom-bust__fill`, `.boom-bust__fill--boom`, `.boom-bust__fill--bust`.
+
+**Required states:**
+
+1. **Player with ratings** → the section as described above, both tracks fill proportionally, numbers match DB.
+2. **Player with null ratings** (generator hasn't run) → render the section with a muted `—` in place of each number and empty tracks. Do **not** hide the section; the user needs to see that the rating is absent rather than assume it's zero.
+3. **Pick** (`data.kind === 'pick'`) → omit the section entirely. Picks have no boom/bust and an empty section would be noise.
+
+**Responsive:** At mobile width, the tracks and callouts stack rather than squash, consistent with how `.detail-header` and `.value-card` already adapt (see `@media (max-width: 768px)` block in `theme.css`).
+
 ### 3. Keep / Trade / Cut (`/ktc`)
 
 - **Per-session popup**: on every new browser/tab session (gate on `sessionStorage['ef_ktc_seen']`, not localStorage), a modal overlay appears over whatever page the user landed on. Same KTC card UI as the full page. Dismissible (✕ or Skip); after voting or skipping, sets sessionStorage flag and won't re-appear until the tab/browser is closed and reopened. The KTC tab remains for voluntary additional votes.
@@ -62,4 +89,4 @@ Persistent top bar: `EMPIRE FANTASY` wordmark left; tabs: **Calculator · Rankin
 
 ## Components inventory
 
-`LeagueTypeSelector`, `AssetSearch`, `AssetChip`, `TradeScale`, `VerdictBanner`, `RankingsTable`, `ValueChart` (Recharts line), `KtcCard`, `LogTable`, `ReasonChip`, `SuggestionsPanel`.
+`LeagueTypeSelector`, `AssetSearch`, `AssetChip`, `TradeScale`, `VerdictBanner`, `RankingsTable`, `ValueChart` (Recharts line), `KtcCard`, `LogTable`, `ReasonChip`, `SuggestionsPanel`, `BoomBust`.

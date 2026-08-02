@@ -52,6 +52,8 @@ CREATE TABLE players (
   team TEXT,                      -- NFL abbreviation, NULL if free agent
   age REAL,
   status TEXT DEFAULT 'active',   -- active | injured | inactive
+  boom_pct INTEGER CHECK (boom_pct IS NULL OR boom_pct BETWEEN 0 AND 100),
+  bust_pct INTEGER CHECK (bust_pct IS NULL OR bust_pct BETWEEN 0 AND 100),
   created_at TEXT DEFAULT (datetime('now')),
   updated_at TEXT
 );
@@ -151,7 +153,7 @@ Indexes: `adjustment_log(asset_id, league_type_id)`, `adjustment_log(created_at)
 GET  /api/league-types
 GET  /api/rankings?leagueType=DYN_SF_PPR_TEP&position=RB   # sorted, with overall + positional rank
 GET  /api/assets/search?q=jeff&leagueType=...              # calculator search (includes picks if DYN)
-GET  /api/assets/:id?leagueType=...                        # detail + history + recent log entries
+GET  /api/assets/:id?leagueType=...                        # detail + history + recent log entries + boom_pct/bust_pct (players only, null for picks)
 POST /api/trade/evaluate        { leagueType, team1: [assetIds], team2: [assetIds] }
 GET  /api/ktc/prompt[?leagueType=CODE]                     # creates/returns prompt for session (sets session cookie)
 POST /api/ktc/vote              { promptId, keep, trade, cut }
@@ -213,3 +215,37 @@ Trade evaluation is **stateless** (no DB write) — it reads current values and 
 
 - Middleware sets `ef_session` UUID cookie if absent; upserts `sessions` row.
 - Vote limits: max 1 unanswered prompt per session at a time; max 20 votes/session/day; a session never sees the same asset trio twice.
+
+### GET /api/assets/:id
+
+**Response:**
+```json
+{
+  "asset_id": 123,
+  "kind": "player",
+  "name": "Justin Jefferson",
+  "position": "WR",
+  "team": "MIN",
+  "age": 27,
+  "status": "active",
+  "boom_pct": 38,
+  "bust_pct": 21,
+  "values": [
+    { "leagueType": "DYN_SF_PPR_TEP", "format": "DYN", "qb": "SF", "rec": "PPR", "tep": "TEP", "value": 994.0 },
+    ...
+  ],
+  "history": [
+    { "date": "2026-01-15", "value": 990.0, "leagueType": "DYN_SF_PPR_TEP" },
+    ...
+  ],
+  "logs": [
+    { "id": 456, "old_value": 985.0, "new_value": 990.0, "delta": 5.0, "reason": "stat", "detail": "{\"week\":1,\"points\":28.4}", "created_at": "2026-09-10T14:22:00", "leagueType": "DYN_SF_PPR_TEP" },
+    ...
+  ]
+}
+```
+
+- `boom_pct` / `bust_pct` are **integer percentages 0–100**, independent of each other and of the 1.0–1000.0 value scale.
+- For picks (`kind === 'pick'`), both are `null`.
+- For players not yet processed by the generator, both are `null` (not 0).
+- **Current values are random placeholders** — `npm run boom-bust:generate` fills them with deterministic seeded random integers 5–65. Real computation is deferred (see roadmap).

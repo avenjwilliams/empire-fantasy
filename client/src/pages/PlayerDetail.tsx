@@ -32,6 +32,8 @@ interface AssetDetail {
   team: string | null;
   age: number | null;
   status: string | null;
+  boom_pct: number | null;
+  bust_pct: number | null;
   values: ValueEntry[];
   history: { date: string; value: number; leagueType: string }[];
   logs: LogEntry[];
@@ -86,6 +88,46 @@ export default function PlayerDetail() {
           </span>
         )}
       </div>
+
+      {/* Boom / Bust section — only for players, not picks */}
+      {data.kind === 'player' && (
+        <section className="boom-bust">
+          <h2 className="page__title" style={{ fontSize: '0.9rem' }}>Boom / Bust</h2>
+          <div className="boom-bust__tracks">
+            <div className="boom-bust__track">
+              <div className="boom-bust__label-row">
+                <span className="boom-bust__label boom-bust__label--boom">BOOM</span>
+                <span className="boom-bust__value boom-bust__value--boom">
+                  {data.boom_pct !== null ? `${data.boom_pct}%` : '—'}
+                </span>
+              </div>
+              <div className="boom-bust__bar">
+                <div
+                  className="boom-bust__fill boom-bust__fill--boom"
+                  style={{ width: data.boom_pct !== null ? `${data.boom_pct}%` : '0%' }}
+                ></div>
+              </div>
+            </div>
+            <div className="boom-bust__track">
+              <div className="boom-bust__label-row">
+                <span className="boom-bust__label boom-bust__label--bust">BUST</span>
+                <span className="boom-bust__value boom-bust__value--bust">
+                  {data.bust_pct !== null ? `${data.bust_pct}%` : '—'}
+                </span>
+              </div>
+              <div className="boom-bust__bar">
+                <div
+                  className="boom-bust__fill boom-bust__fill--bust"
+                  style={{ width: data.bust_pct !== null ? `${data.bust_pct}%` : '0%' }}
+                ></div>
+              </div>
+            </div>
+          </div>
+          <p className="text-muted" style={{ fontSize: '0.7rem', marginTop: '0.5rem', fontFamily: 'var(--font-mono)' }}>
+            Placeholder ratings — derived from random seed. Real computation deferred.
+          </p>
+        </section>
+      )}
 
       {/* 24-set value grid */}
       <h2 className="page__title" style={{ fontSize: '0.9rem' }}>Value Across All League Types</h2>

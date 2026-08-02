@@ -11,7 +11,8 @@
     "rankings:export": "tsx scripts/export-rankings.ts",
     "rankings:import": "tsx scripts/import-rankings.ts",
     "rankings:rebase": "tsx scripts/rebase-precision.ts",
-    "snapshot": "tsx scripts/snapshot-history.ts"
+    "snapshot": "tsx scripts/snapshot-history.ts",
+    "boom-bust:generate": "tsx scripts/generate-boom-bust.ts"
   },
   "devDependencies": {
     "@types/node": "^20.14.0",

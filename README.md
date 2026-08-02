@@ -51,6 +51,7 @@ npm run seed
 | `npm run rankings:import` | Import edited CSVs back to DB |
 | `npm run rankings:rebase` | Rebase stored values to native 999.9-scale precision (preserves drift) |
 | `npm run snapshot` | Write daily value_history snapshot |
+| `npm run boom-bust:generate` | Generate boom/bust placeholder ratings for all players |
 
 Add `--fixtures` or set `EF_FIXTURES=1` to use offline fixture data for `seed` and `stats:week`.
 
@@ -96,6 +97,24 @@ The image bundles `data/rankings/`, `scripts/`, and `server/src` specifically so
 ### Daily snapshot
 
 Run `npm run snapshot` once per day to power value-over-time charts on the player detail page. This copies current `asset_values` into `value_history` for the current date.
+
+### Boom/Bust generation
+
+Run `npm run boom-bust:generate` once (or after seeding new players) to populate `boom_pct` and `bust_pct` on all players.
+
+```bash
+# First run — fills NULL rows with deterministic placeholder ratings (5–65)
+npm run boom-bust:generate
+
+# Subsequent runs — idempotent, only fills new NULL rows
+npm run boom-bust:generate
+
+# Force regeneration of all players (overwrites existing)
+npm run boom-bust:generate -- --force
+```
+
+- Ratings are random placeholders seeded from `sleeper_id` — same player always gets the same numbers across reseeds.
+- Real computation is deferred (see roadmap). Current numbers are not signal.
 
 ### Precision rebase (one-time)
 

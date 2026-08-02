@@ -27,6 +27,12 @@ export interface Player {
   status: PlayerStatus;
   created_at: string;
   updated_at: string | null;
+  /** Share of weeks that qualify as a boom outcome, 0–100. Null until generated.
+   *  Independent of bust_pct — the two are not shares of the same whole. */
+  boom_pct: number | null;
+  /** Share of weeks that qualify as a bust outcome, 0–100. Null until generated.
+   *  Independent of boom_pct. */
+  bust_pct: number | null;
 }
 
 export interface Pick {

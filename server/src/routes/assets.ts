@@ -103,7 +103,9 @@ router.get('/:id', (req, res) => {
       CASE
         WHEN a.kind = 'player' THEN p.status
         ELSE NULL
-      END as status
+      END as status,
+      CASE WHEN a.kind = 'player' THEN p.boom_pct ELSE NULL END as boom_pct,
+      CASE WHEN a.kind = 'player' THEN p.bust_pct ELSE NULL END as bust_pct
     FROM assets a
     LEFT JOIN players p ON a.player_id = p.id
     LEFT JOIN picks pk ON a.pick_id = pk.id
