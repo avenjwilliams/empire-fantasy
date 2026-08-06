@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useLeagueType } from '../context/LeagueTypeContext.js';
 import AssetSearch from '../components/AssetSearch.js';
 import TradeScale from '../components/TradeScale.js';
@@ -9,7 +9,8 @@ interface SelectedAsset {
   name: string;
   position: string;
   team: string | null;
-  value: number;
+  /** Value per league type (all 24), fetched from GET /api/assets/:id at add time. */
+  valuesByLeagueType: Record<string, number>;
 }
 
 interface TradeAsset {
@@ -51,6 +52,14 @@ export default function Calculator() {
   const [result, setResult] = useState<TradeResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showMath, setShowMath] = useState(false);
+  const [pickNotice, setPickNotice] = useState<string | null>(null);
+
+  // Keep readable snapshots of the teams for the redraft-removal effect without
+  // needing team1/team2 in its dependency array.
+  const team1Ref = useRef<SelectedAsset[]>(team1);
+  const team2Ref = useRef<SelectedAsset[]>(team2);
+  team1Ref.current = team1;
+  team2Ref.current = team2;
 
   const allIds = useMemo(() => {
     const set = new Set<number>();
@@ -58,6 +67,20 @@ export default function Calculator() {
     team2.forEach(a => set.add(a.asset_id));
     return set;
   }, [team1, team2]);
+
+  // When the league type becomes a Redraft, drop any dynasty picks from both sides.
+  // Picks have no Redraft value and POST /api/trade/evaluate 400s on them. This effect
+  // runs before the (debounced) evaluate effect fires, so the 400 never occurs.
+  useEffect(() => {
+    if (!code.startsWith('RED')) return;
+    const removed1 = team1Ref.current.filter(a => a.position === 'PICK').length;
+    const removed2 = team2Ref.current.filter(a => a.position === 'PICK').length;
+    const removed = removed1 + removed2;
+    if (removed === 0) return;
+    setTeam1(prev => prev.filter(a => a.position !== 'PICK'));
+    setTeam2(prev => prev.filter(a => a.position !== 'PICK'));
+    setPickNotice(`Removed ${removed} pick(s) — picks aren't tradeable in Redraft.`);
+  }, [code]);
 
   // Auto-evaluate on change (debounced)
   useEffect(() => {
@@ -88,16 +111,46 @@ export default function Calculator() {
     return () => clearTimeout(timer);
   }, [team1, team2, code]);
 
-  const addToTeam = (team: 1 | 2) => (asset: any) => {
+  const addToTeam = (team: 1 | 2) => async (asset: any) => {
+    // Seed the chip immediately with the value AssetSearch already provided, so the
+    // UI doesn't wait on a network round trip. The whole league-type map replaces it
+    // when the detail fetch resolves.
     const entry: SelectedAsset = {
       asset_id: asset.asset_id,
       name: asset.name,
       position: asset.position,
       team: asset.team,
-      value: asset.value,
+      valuesByLeagueType: { [code]: asset.value },
     };
+
     if (team === 1) setTeam1(prev => [...prev, entry]);
     else setTeam2(prev => [...prev, entry]);
+
+    // Fetch the asset's value in every league type once, at add time. Chips then read
+    // the current `code` out of the map, so switching league types is an instant lookup.
+    let map: Record<string, number> | null = null;
+    try {
+      const res = await fetch(`/api/assets/${asset.asset_id}?leagueType=${code}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data && Array.isArray(data.values)) {
+          map = {};
+          for (const v of data.values) map[v.leagueType] = v.value;
+        }
+      }
+    } catch {
+      map = null;
+    }
+
+    // Apply the resolved map with the functional form, matching by asset_id so an in-flight
+    // resolve never drops an asset added while the fetch was pending. On error, keep the
+    // seeded single entry (the chip shows '—' for any other league type, which is honest).
+    if (map) {
+      const patch = (prev: SelectedAsset[]) =>
+        prev.map(a => (a.asset_id === entry.asset_id ? { ...a, valuesByLeagueType: map! } : a));
+      if (team === 1) setTeam1(prev => patch(prev));
+      else setTeam2(prev => patch(prev));
+    }
   };
 
   const removeFromTeam = (team: 1 | 2, assetId: number) => {
@@ -108,6 +161,15 @@ export default function Calculator() {
   return (
     <div className="page">
       <h1 className="page__title">Trade Calculator</h1>
+
+      {pickNotice && (
+        <div className="calc-notice" role="status">
+          <span>{pickNotice}</span>
+          <button className="calc-notice__dismiss" onClick={() => setPickNotice(null)} aria-label="Dismiss">
+            ✕
+          </button>
+        </div>
+      )}
 
       <div className="calc-grid">
         {/* Team 1 */}
@@ -124,7 +186,9 @@ export default function Calculator() {
               <div key={a.asset_id} className="asset-chip">
                 <span className={`pos-badge pos-badge--${a.position}`}>{a.position}</span>
                 <span className="asset-chip__name">{a.name}</span>
-                <span className="asset-chip__value">{a.value.toFixed(1)}</span>
+                <span className={`asset-chip__value${a.valuesByLeagueType[code] === undefined ? ' asset-chip__value--muted' : ''}`}>
+                  {a.valuesByLeagueType[code] !== undefined ? a.valuesByLeagueType[code].toFixed(1) : '—'}
+                </span>
                 <button
                   className="asset-chip__remove"
                   onClick={() => removeFromTeam(1, a.asset_id)}
@@ -190,7 +254,9 @@ export default function Calculator() {
               <div key={a.asset_id} className="asset-chip">
                 <span className={`pos-badge pos-badge--${a.position}`}>{a.position}</span>
                 <span className="asset-chip__name">{a.name}</span>
-                <span className="asset-chip__value">{a.value.toFixed(1)}</span>
+                <span className={`asset-chip__value${a.valuesByLeagueType[code] === undefined ? ' asset-chip__value--muted' : ''}`}>
+                  {a.valuesByLeagueType[code] !== undefined ? a.valuesByLeagueType[code].toFixed(1) : '—'}
+                </span>
                 <button
                   className="asset-chip__remove"
                   onClick={() => removeFromTeam(2, a.asset_id)}

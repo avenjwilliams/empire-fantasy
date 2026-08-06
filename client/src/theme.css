@@ -757,6 +757,10 @@ a:hover { text-decoration: underline; }
   text-align: right;
 }
 
+.asset-chip__value--muted {
+  color: var(--ink-muted);
+}
+
 .asset-chip__remove {
   background: none;
   border: none;
@@ -870,6 +874,34 @@ a:hover { text-decoration: underline; }
   border-radius: var(--radius);
   color: var(--negative);
   font-size: 0.85rem;
+}
+
+.calc-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--bg-raised);
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--ink-muted);
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+}
+
+.calc-notice__dismiss {
+  background: none;
+  border: none;
+  color: var(--ink-muted);
+  cursor: pointer;
+  font-size: 0.85rem;
+  padding: 0 0.25rem;
+  line-height: 1;
+}
+.calc-notice__dismiss:hover {
+  color: var(--ink);
 }
 
 /* ---- Math Panel ---- */
