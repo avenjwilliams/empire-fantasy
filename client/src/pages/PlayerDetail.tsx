@@ -80,53 +80,6 @@ function Ring({ pct, color, label }: RingProps) {
   );
 }
 
-// YYYY-MM-DD for `days` days ago (used for both the trend row and the chart range).
-function isoDaysAgo(days: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() - days);
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${d.getFullYear()}-${m}-${day}`;
-}
-
-// Most recent snapshot at-or-before the cutoff N days ago, or null if none exists.
-function trendDelta(
-  series: { date: string; value: number }[],
-  days: number,
-  base: number,
-): number | null {
-  const cutoff = isoDaysAgo(days);
-  let found = null;
-  for (const e of series) {
-    if (e.date <= cutoff) found = e;
-  }
-  return found === null ? null : base - found.value;
-}
-
-interface TrendStatProps {
-  label: string;
-  delta: number | null;
-}
-
-function TrendStat({ label, delta }: TrendStatProps) {
-  if (delta === null) {
-    return (
-      <div className="trend-stat">
-        <span className="trend-stat__label">{label}</span>
-        <span className="trend-stat__value">—</span>
-      </div>
-    );
-  }
-  const cls = delta > 0 ? 'delta--pos' : delta < 0 ? 'delta--neg' : 'delta--zero';
-  const sign = delta > 0 ? '+' : '';
-  return (
-    <div className="trend-stat">
-      <span className="trend-stat__label">{label}</span>
-      <span className={`trend-stat__value ${cls}`}>{sign}{delta.toFixed(1)}</span>
-    </div>
-  );
-}
-
 interface RangeOption {
   label: string;
   days: number | null;
@@ -164,15 +117,6 @@ export default function PlayerDetail() {
 
   const currentValue = data.values.find(v => v.leagueType === code);
   const isPick = data.kind === 'pick';
-
-  // Ascending series filtered to the current league type, for trend math.
-  const historySeries = data.history
-    .filter(h => h.leagueType === code)
-    .sort((a, b) => a.date.localeCompare(b.date));
-
-  const base = currentValue ? currentValue.value : null;
-  const trend7 = base === null ? null : trendDelta(historySeries, 7, base);
-  const trend30 = base === null ? null : trendDelta(historySeries, 30, base);
 
   return (
     <div className="page">
@@ -222,12 +166,6 @@ export default function PlayerDetail() {
           Placeholder ratings — derived from random seed. Real computation deferred.
         </p>
       )}
-
-      {/* Trend row */}
-      <div className="trend-row">
-        <TrendStat label="7D" delta={trend7} />
-        <TrendStat label="30D" delta={trend30} />
-      </div>
 
       {/* Value across all league types — behind a disclosure */}
       {data.values.length > 0 && (

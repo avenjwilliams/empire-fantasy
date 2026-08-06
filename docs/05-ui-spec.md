@@ -90,7 +90,7 @@ Positioned inside `.calc-result`, after `.calc-result__details` and before the "
 - **Rank columns do not renumber on sort**: overallRank (#) and positionalLabel (Pos) are identity computed server-side from value order. They travel with their rows. After sorting by Boom, the top row might read #47 / WR12 — this is correct. Do not recompute rank client-side.
 - **Header affordance**: sortable headers are `<button>` elements with pointer cursor, monospace sort indicator (▼ desc, ▲ asc, none for default), and `aria-sort` attribute. Keyboard accessible (Enter/Space).
 - **Sticky header**: thead is `position: sticky; top: 0; z-index: 10` — header markup must not break this.
-- Row click → Player detail (`/player/:assetId`): header shows pos-badge, name/team/age/status plus two rank badges (POS, e.g. "RB2", and OVR, e.g. "#4") when ranks exist; a hero row with the current value + label and, for players, boom/bust rings (picks get the value only, no rings); a trend row showing 7-day and 30-day value change with "—" when there isn't an old-enough snapshot; the value-across-all-24-formats grid now behind a "Show all 24 formats" disclosure (closed by default); the value-over-time chart with a 30D / 90D / ALL range toggle; and the recent adjustment log now behind a "Recent adjustments (N)" disclosure (closed by default).
+- Row click → Player detail (`/player/:assetId`): header shows pos-badge, name/team/age/status plus two rank badges (POS, e.g. "RB2", and OVR, e.g. "#4") when ranks exist; a hero row with the current value + label and, for players, boom/bust rings (picks get the value only, no rings); the value-across-all-24-formats grid behind a "Show all 24 formats" disclosure (closed by default); the value-over-time chart with a 30D / 90D / ALL range toggle; and the recent adjustment log behind a "Recent adjustments (N)" disclosure (closed by default).
 - Virtualize or paginate at 100 rows.
 
 **Mobile (< 768px)**: Boom and Bust columns hidden (`display: none` on both th/td). Remaining columns still sortable. Table horizontally scrolls for rank/name/value.
@@ -98,7 +98,8 @@ Positioned inside `.calc-result`, after `.calc-result__details` and before the "
 ### Player Detail — Boom / Bust Section
 
 Two independent donut-gauge rings sit in the player detail **hero row**, to the right of the
-value, above the trend row. Boom uses `var(--positive)`, bust uses `var(--negative)`.
+value, above the "Show all 24 formats" disclosure. Boom uses `var(--positive)`, bust uses
+`var(--negative)`.
 
 **Visual: two side-by-side SVG rings**
 
@@ -140,10 +141,6 @@ side by side; rank badges wrap under the name. Consistent with the existing
   side — `POS` above `positionalLabel` (accent, 2px accent border) and `OVR` above
   `#${overallRank}` (ink, 2px default border). Both null → render neither. Picks render them
   in Dynasty (`positionalLabel` reads "PICK3").
-- **Trend row**: two readouts, `7D` and `30D`, for value change computed client-side. Each is
-  `currentValue − most recent snapshot with date ≤ (today − N days)`, shown `.toFixed(1)` with
-  an explicit sign and the existing `delta--pos` / `delta--neg` / `delta--zero` colors. A
-  window with no old-enough snapshot shows `—` (never a fabricated `0.0`).
 
 ### 3. Keep / Trade / Cut (`/ktc`)
 
