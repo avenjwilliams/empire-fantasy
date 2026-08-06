@@ -163,7 +163,82 @@ router.get('/:id', (req, res) => {
     LIMIT 50
   `).all(assetId);
 
-  res.json({ ...asset, values, history, logs });
+  // Ranks relative to the league type, using the same eligibility rule and
+  // ordering as GET /api/rankings (but with an a.id ASC deterministic tie-break).
+  // Returns null for all three when the rank is undefined for this request.
+  let overallRank: number | null = null;
+  let positionalRank: number | null = null;
+  let positionalLabel: string | null = null;
+
+  if (leagueType && typeof leagueType === 'string') {
+    const lt = db.prepare('SELECT id, format FROM league_types WHERE code = ?').get(leagueType) as
+      { id: number; format: string } | undefined;
+
+    if (lt) {
+      const isDynasty = lt.format === 'DYN';
+      const isPick = asset.kind === 'pick';
+
+      // Picks are only ranked in dynasty league types.
+      if ((!isPick || isDynasty)) {
+        // The asset must have a value in this league type to have a rank.
+        const valueRow = db.prepare(`
+          SELECT av.value
+          FROM asset_values av
+          WHERE av.asset_id = ? AND av.league_type_id = ?
+        `).get(assetId, lt.id) as { value: number } | undefined;
+
+        if (valueRow) {
+          const value = valueRow.value;
+          const eligibility = "(a.kind = 'player' OR (a.kind = 'pick' AND ? = 1))";
+
+          // Standard competition ranking with a.id ASC tie-break: rank = 1 + the
+          // number of eligible assets before this one in (value DESC, id ASC) order.
+          const overall = db.prepare(`
+            SELECT COUNT(*) as c
+            FROM asset_values av
+            JOIN assets a ON a.id = av.asset_id
+            WHERE av.league_type_id = ?
+              AND ${eligibility}
+              AND (av.value > ? OR (av.value = ? AND a.id < ?))
+          `).get(lt.id, isDynasty ? 1 : 0, value, value, assetId) as { c: number };
+          overallRank = overall.c + 1;
+
+          // Positional bucket: 'PICK' is its own position; players use p.position.
+          let positionCount: number;
+          if (isPick) {
+            const pos = db.prepare(`
+              SELECT COUNT(*) as c
+              FROM asset_values av
+              JOIN assets a ON a.id = av.asset_id
+              WHERE av.league_type_id = ?
+                AND ${eligibility}
+                AND a.kind = 'pick'
+                AND (av.value > ? OR (av.value = ? AND a.id < ?))
+            `).get(lt.id, isDynasty ? 1 : 0, value, value, assetId) as { c: number };
+            positionCount = pos.c;
+          } else {
+            const pos = db.prepare(`
+              SELECT COUNT(*) as c
+              FROM asset_values av
+              JOIN assets a ON a.id = av.asset_id
+              JOIN players p ON a.player_id = p.id
+              WHERE av.league_type_id = ?
+                AND ${eligibility}
+                AND a.kind = 'player' AND p.position = ?
+                AND (av.value > ? OR (av.value = ? AND a.id < ?))
+            `).get(lt.id, isDynasty ? 1 : 0, asset.position, value, value, assetId) as { c: number };
+            positionCount = pos.c;
+          }
+          positionalRank = positionCount + 1;
+          positionalLabel = isPick
+            ? `PICK${positionalRank}`
+            : `${asset.position}${positionalRank}`;
+        }
+      }
+    }
+  }
+
+  res.json({ ...asset, values, history, logs, overallRank, positionalRank, positionalLabel });
 });
 
 export default router;
