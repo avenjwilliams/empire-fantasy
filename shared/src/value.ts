@@ -1,4 +1,4 @@
-import type { TradeAsset, TradeSide, TradeResult, Verdict, Position, RecScoring, TEPSetting, Format, TradeSuggestion } from './types.js';
+import type { TradeAsset, TradeSide, TradeResult, Verdict, Position, RecScoring, TEPSetting, Format, TradeSuggestion, SideBoomBust } from './types.js';
 import {
   SCORING, REC_BONUS, TEP_BONUS,
   STAT_SENSITIVITY, STAT_CAP, AGE_NUDGE,
@@ -133,22 +133,73 @@ function computeAdviceGap(diff: number, losingAssetCount: number): number | null
   return clampRound(neededValue);
 }
 
+/**
+ * Compute value-weighted mean boom/bust for a side.
+ * Weight is raw value (not depth weight), excludes unrated assets.
+ * Returns null for boom/bust when no rated assets.
+ * Boom and bust are independent — each uses its own denominator.
+ */
+export function computeSideBoomBust(
+  assets: { value: number; boom_pct: number | null; bust_pct: number | null }[]
+): SideBoomBust {
+  let boomNumerator = 0;
+  let bustNumerator = 0;
+  let boomDenominator = 0;
+  let bustDenominator = 0;
+  let ratedCount = 0;
+  let unratedCount = 0;
+
+  for (const asset of assets) {
+    const hasBoom = asset.boom_pct !== null;
+    const hasBust = asset.bust_pct !== null;
+
+    if (!hasBoom && !hasBust) {
+      unratedCount++;
+      continue;
+    }
+
+    ratedCount++;
+
+    if (hasBoom) {
+      boomNumerator += asset.value * asset.boom_pct!;
+      boomDenominator += asset.value;
+    }
+    if (hasBust) {
+      bustNumerator += asset.value * asset.bust_pct!;
+      bustDenominator += asset.value;
+    }
+  }
+
+  if (ratedCount === 0) {
+    // No assets with any rating at all
+    return { boom: null, bust: null, ratedCount: 0, unratedCount };
+  }
+
+  return {
+    boom: boomDenominator > 0 ? Math.round(boomNumerator / boomDenominator) : null,
+    bust: bustDenominator > 0 ? Math.round(bustNumerator / bustDenominator) : null,
+    ratedCount,
+    unratedCount,
+  };
+}
+
 export interface EvaluateTradeInput {
   leagueType: string;
-  team1: { id: number; name: string; value: number }[];
-  team2: { id: number; name: string; value: number }[];
+  team1: { id: number; name: string; value: number; boom_pct?: number | null; bust_pct?: number | null }[];
+  team2: { id: number; name: string; value: number; boom_pct?: number | null; bust_pct?: number | null }[];
 }
 
 /**
  * Evaluate a trade between two teams.
- * Positive scale means trade favors Team 2 (Team 1 gives more).
- * Negative scale means trade favors Team 1 (Team 2 gives more).
+ * Team 1 and Team 2 are the sides *receiving* assets.
+ * Negative scale means trade favors Team 1 (Team 1 received more value).
+ * Positive scale means trade favors Team 2 (Team 2 received more value).
  */
 export function evaluateTrade(input: EvaluateTradeInput): TradeResult {
   const { leagueType, team1, team2 } = input;
 
   // Build trade assets sorted by linear value descending
-  const buildSide = (assets: { id: number; name: string; value: number }[]): TradeSide => {
+  const buildSide = (assets: { id: number; name: string; value: number; boom_pct?: number | null; bust_pct?: number | null }[]): TradeSide => {
     const sorted = assets
       .slice()
       .sort((a, b) => b.value - a.value);
@@ -198,12 +249,12 @@ export function evaluateTrade(input: EvaluateTradeInput): TradeResult {
   const total = side1.sideValue + side2.sideValue;
   const lean = diff / Math.max(total, 1);
 
-  const scale = Math.max(-100, Math.min(100, Math.round(lean * TRADE_CONSTANTS.SCALE_MULTIPLIER)));
+  const scale = Math.max(-100, Math.min(100, Math.round(-lean * TRADE_CONSTANTS.SCALE_MULTIPLIER)));
   const verdict = getVerdict(lean);
 
   const verdictLabel = scale === 0 || verdict === 'Fair trade'
     ? verdict
-    : `${verdict} — Team ${diff > 0 ? '2' : '1'}`;
+    : `${verdict} — Team ${diff > 0 ? '1' : '2'}`;
 
   const differencePct = total > 0 ? Math.round(Math.abs(diff) / total * 1000) / 10 : 0;
 
@@ -218,6 +269,10 @@ export function evaluateTrade(input: EvaluateTradeInput): TradeResult {
   const valueAdjustment = adjustment;
   const valueAdjustmentSide = adjustmentSide;
 
+  // Compute boom/bust averages for each side (descriptive only, never affects verdict)
+  const team1BoomBust = computeSideBoomBust(team1.map(a => ({ value: a.value, boom_pct: a.boom_pct ?? null, bust_pct: a.bust_pct ?? null })));
+  const team2BoomBust = computeSideBoomBust(team2.map(a => ({ value: a.value, boom_pct: a.boom_pct ?? null, bust_pct: a.bust_pct ?? null })));
+
   return {
     leagueType,
     team1: side1,
@@ -229,6 +284,10 @@ export function evaluateTrade(input: EvaluateTradeInput): TradeResult {
     valueAdjustment,
     valueAdjustmentSide,
     suggestions: [], // Will be populated by the server route after fetching candidates
+    boomBust: {
+      team1: team1BoomBust,
+      team2: team2BoomBust,
+    },
   };
 }
 

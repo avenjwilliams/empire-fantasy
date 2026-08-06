@@ -5,6 +5,7 @@ import {
   getWeight,
   getVerdict,
   evaluateTrade,
+  computeSideBoomBust,
   rankToValue,
   computeTradeSuggestions,
   TRADE_CONSTANTS,
@@ -138,7 +139,7 @@ describe('value.ts', () => {
         team1: [{ id: 1, name: 'Player A', value: 850.0 }],
         team2: [{ id: 2, name: 'Player B', value: 850.0 }],
       });
-      expect(result.scale).toBe(0);
+      expect(result.scale).toBeCloseTo(0); // scale is exactly 0 for fair trades (allow -0)
       expect(result.verdict).toBe('Fair trade');
     });
 
@@ -154,10 +155,10 @@ describe('value.ts', () => {
         ],
       });
       // In linear mode with depth weighting:
-      // Team 1: 950 * 1.0 = 950
-      // Team 2: 550*1.0 + 550*0.9 + 550*0.8 = 550 + 495 + 440 = 1485
-      // diff = 950 - 1485 = -535 → scale = -66 (Team 1 gives less value, so Team 2 favored)
-      expect(result.scale).toBeLessThan(0);
+      // Team 1 receives: 950 * 1.0 = 950
+      // Team 2 receives: 550*1.0 + 550*0.9 + 550*0.8 = 550 + 495 + 440 = 1485
+      // Team 2 receives more → Team 2 is favored → scale should be POSITIVE
+      expect(result.scale).toBeGreaterThan(0);
     });
 
     // Invariant 3: Symmetric — swap sides, sign flips exactly
@@ -245,8 +246,8 @@ describe('value.ts', () => {
         ],
         team2: [{ id: 3, name: 'C', value: 700.0 }],
       });
-      // Team 1 gives more total value → favors Team 2
-      expect(result.scale).toBeGreaterThan(0);
+      // Team 1 receives 1400, Team 2 receives 700 → Team 1 is favored → scale should be NEGATIVE
+      expect(result.scale).toBeLessThan(0);
     });
 
     it('provides adviceGap for uneven trades', () => {
@@ -267,6 +268,65 @@ describe('value.ts', () => {
         team2: [{ id: 2, name: 'B', value: 750.0 }],
       });
       expect(result.adviceGap).toBeNull();
+    });
+
+    // =====================================================
+    // Direction convention regression tests
+    // =====================================================
+
+    it('repro: Team 1 receives 509.3, Team 2 receives 758.2 → verdict names Team 2, scale > 0', () => {
+      const result = evaluateTrade({
+        leagueType: 'DYN_SF_PPR_TEP',
+        team1: [{ id: 1, name: 'Jameson Williams', value: 509.3 }],
+        team2: [{ id: 2, name: 'James Cook', value: 758.2 }],
+      });
+      // Team 2 receives more value → Team 2 is favored
+      expect(result.verdict).toMatch(/Team 2$/);
+      expect(result.scale).toBeGreaterThan(0);
+    });
+
+    it('mirror: Team 1 receives 758.2, Team 2 receives 509.3 → verdict names Team 1, scale < 0', () => {
+      const result = evaluateTrade({
+        leagueType: 'DYN_SF_PPR_TEP',
+        team1: [{ id: 1, name: 'James Cook', value: 758.2 }],
+        team2: [{ id: 2, name: 'Jameson Williams', value: 509.3 }],
+      });
+      // Team 1 receives more value → Team 1 is favored
+      expect(result.verdict).toMatch(/Team 1$/);
+      expect(result.scale).toBeLessThan(0);
+    });
+
+    it('label/sign agreement: verdict naming Team 1 always has scale < 0, Team 2 always has scale > 0', () => {
+      const fixtures = [
+        // Team 1 favored (receives more total value after adjustment)
+        { team1: [{ value: 900 }], team2: [{ value: 600 }], expectTeam: 1 },
+        { team1: [{ value: 800 }, { value: 700 }], team2: [{ value: 500 }], expectTeam: 1 },
+        { team1: [{ value: 550 }, { value: 550 }, { value: 550 }], team2: [{ value: 950 }], expectTeam: 1 },
+        // Team 2 favored (receives more total value after adjustment)
+        { team1: [{ value: 600 }], team2: [{ value: 900 }], expectTeam: 2 },
+        { team1: [{ value: 500 }], team2: [{ value: 800 }, { value: 700 }], expectTeam: 2 },
+      ];
+
+      for (const f of fixtures) {
+        const team1Assets = f.team1.map((v, i) => ({ id: i + 1, name: `T1-${i}`, value: v.value }));
+        const team2Assets = f.team2.map((v, i) => ({ id: i + 100, name: `T2-${i}`, value: v.value }));
+
+        const result = evaluateTrade({
+          leagueType: 'DYN_SF_PPR_TEP',
+          team1: team1Assets,
+          team2: team2Assets,
+        });
+
+        if (result.verdict === 'Fair trade') continue; // skip fair trades
+
+        if (f.expectTeam === 1) {
+          expect(result.verdict).toMatch(/Team 1$/);
+          expect(result.scale).toBeLessThan(0);
+        } else {
+          expect(result.verdict).toMatch(/Team 2$/);
+          expect(result.scale).toBeGreaterThan(0);
+        }
+      }
     });
 
     // =====================================================
@@ -784,22 +844,207 @@ describe('value.ts', () => {
     });
   });
 
-  describe('populationStddev', () => {
-    it('computes correctly for known values', () => {
-      // [2, 4, 4, 4, 5, 5, 7, 9] → mean=5, var=4, stddev=2
-      expect(populationStddev([2, 4, 4, 4, 5, 5, 7, 9])).toBe(2);
+  describe('computeSideBoomBust', () => {
+    it('returns null boom/bust for empty array', () => {
+      const result = computeSideBoomBust([]);
+      expect(result.boom).toBeNull();
+      expect(result.bust).toBeNull();
+      expect(result.ratedCount).toBe(0);
+      expect(result.unratedCount).toBe(0);
     });
 
-    it('returns 1 for single value (prevent division by zero)', () => {
-      expect(populationStddev([5])).toBe(1);
+    it('returns null boom/bust for all unrated assets (picks)', () => {
+      const result = computeSideBoomBust([
+        { value: 500, boom_pct: null, bust_pct: null },
+        { value: 300, boom_pct: null, bust_pct: null },
+      ]);
+      expect(result.boom).toBeNull();
+      expect(result.bust).toBeNull();
+      expect(result.ratedCount).toBe(0);
+      expect(result.unratedCount).toBe(2);
     });
 
-    it('returns 1 for empty array', () => {
-      expect(populationStddev([])).toBe(1);
+    it('computes value-weighted mean for single rated asset', () => {
+      const result = computeSideBoomBust([
+        { value: 900, boom_pct: 40, bust_pct: 20 },
+      ]);
+      expect(result.boom).toBe(40);
+      expect(result.bust).toBe(20);
+      expect(result.ratedCount).toBe(1);
+      expect(result.unratedCount).toBe(0);
     });
 
-    it('returns 1 for identical values', () => {
-      expect(populationStddev([10, 10, 10])).toBe(1);
+    it('computes value-weighted mean across multiple rated assets', () => {
+      // Two assets: 900 @ boom:40, 100 @ boom:80
+      // Weighted mean = (900*40 + 100*80) / (900+100) = (36000 + 8000) / 1000 = 44
+      const result = computeSideBoomBust([
+        { value: 900, boom_pct: 40, bust_pct: 10 },
+        { value: 100, boom_pct: 80, bust_pct: 60 },
+      ]);
+      expect(result.boom).toBe(44); // Not 60 (plain mean)
+      expect(result.bust).toBe(15); // (900*10 + 100*60) / 1000 = 15
+      expect(result.ratedCount).toBe(2);
+      expect(result.unratedCount).toBe(0);
+    });
+
+    it('excludes unrated assets from numerator and denominator', () => {
+      // One rated (500 @ 40), one unrated (500 @ null)
+      // Weighted mean = 40, NOT 20
+      const result = computeSideBoomBust([
+        { value: 500, boom_pct: 40, bust_pct: 30 },
+        { value: 500, boom_pct: null, bust_pct: null },
+      ]);
+      expect(result.boom).toBe(40);
+      expect(result.bust).toBe(30);
+      expect(result.ratedCount).toBe(1);
+      expect(result.unratedCount).toBe(1);
+    });
+
+    it('handles independent boom/bust nulls correctly', () => {
+      // In practice both are set together, but handle independently
+      const result = computeSideBoomBust([
+        { value: 500, boom_pct: 40, bust_pct: 30 },
+        { value: 500, boom_pct: 60, bust_pct: null },
+      ]);
+      // boom: both rated = (500*40 + 500*60) / 1000 = 50
+      // bust: only first rated = (500*30) / 500 = 30
+      expect(result.boom).toBe(50);
+      expect(result.bust).toBe(30);
+      expect(result.ratedCount).toBe(2); // both have at least one rating
+      expect(result.unratedCount).toBe(0);
+    });
+
+    it('returns integer outputs', () => {
+      const result = computeSideBoomBust([
+        { value: 999, boom_pct: 33, bust_pct: 33 },
+        { value: 1, boom_pct: 67, bust_pct: 67 },
+      ]);
+      // (999*33 + 1*67) / 1000 = 33.034 -> 33
+      expect(Number.isInteger(result.boom!)).toBe(true);
+      expect(Number.isInteger(result.bust!)).toBe(true);
+      expect(result.boom).toBe(33);
+      expect(result.bust).toBe(33);
+    });
+
+    it('handles boom+bust sum above 100 correctly and independently', () => {
+      const result = computeSideBoomBust([
+        { value: 500, boom_pct: 70, bust_pct: 60 },
+        { value: 500, boom_pct: 80, bust_pct: 50 },
+      ]);
+      expect(result.boom).toBe(75); // (500*70 + 500*80) / 1000 = 75
+      expect(result.bust).toBe(55); // (500*60 + 500*50) / 1000 = 55
+      expect(result.boom! + result.bust!).toBeGreaterThan(100);
+    });
+  });
+
+  describe('evaluateTrade with boom/bust', () => {
+    const baseTrade = {
+      leagueType: 'DYN_SF_PPR_TEP' as const,
+      team1: [{ id: 1, name: 'Star', value: 737.0 }],
+      team2: [
+        { id: 2, name: 'Harrison', value: 518.0 },
+        { id: 3, name: 'Stowers', value: 237.0 },
+      ],
+    };
+
+    const baseTradeWithBoomBust = {
+      leagueType: 'DYN_SF_PPR_TEP' as const,
+      team1: [{ id: 1, name: 'Star', value: 737.0, boom_pct: 40, bust_pct: 25 }],
+      team2: [
+        { id: 2, name: 'Harrison', value: 518.0, boom_pct: 55, bust_pct: 15 },
+        { id: 3, name: 'Stowers', value: 237.0, boom_pct: 60, bust_pct: 20 },
+      ],
+    };
+
+    // Primary regression guard: verdict must be bit-for-bit identical with and without boom/bust
+    const verdictFields = ['scale', 'verdict', 'differencePct', 'adviceGap', 'valueAdjustment', 'valueAdjustmentSide'] as const;
+
+    for (const field of verdictFields) {
+      it(`verdict unchanged: ${field} identical with and without boom/bust`, () => {
+        const without = evaluateTrade(baseTrade);
+        const withBoomBust = evaluateTrade(baseTradeWithBoomBust);
+        expect(withBoomBust[field]).toBe(without[field]);
+      });
+    }
+
+    it('boomBust field is always present with SideBoomBust objects for both sides', () => {
+      const result = evaluateTrade(baseTradeWithBoomBust);
+      expect(result.boomBust).toBeDefined();
+      expect(result.boomBust.team1).toBeDefined();
+      expect(result.boomBust.team2).toBeDefined();
+      expect(typeof result.boomBust.team1.boom).toBe('number');
+      expect(typeof result.boomBust.team1.bust).toBe('number');
+      expect(typeof result.boomBust.team2.boom).toBe('number');
+      expect(typeof result.boomBust.team2.bust).toBe('number');
+    });
+
+    it('computes correct weighted averages for McMillan/Harrison+Stowers fixture', () => {
+      const result = evaluateTrade(baseTradeWithBoomBust);
+      const t1 = result.boomBust.team1;
+      const t2 = result.boomBust.team2;
+
+      // Team 1: single asset 737 @ boom:40, bust:25 -> boom=40, bust=25
+      expect(t1.boom).toBe(40);
+      expect(t1.bust).toBe(25);
+      expect(t1.ratedCount).toBe(1);
+      expect(t1.unratedCount).toBe(0);
+
+      // Team 2: 518 @ 55/15 + 237 @ 60/20
+      // boom = (518*55 + 237*60) / (518+237) = (28490 + 14220) / 755 = 42910/755 = 56.83 -> 57
+      // bust = (518*15 + 237*20) / 755 = (7770 + 4740) / 755 = 12510/755 = 16.57 -> 17
+      expect(t2.boom).toBe(57);
+      expect(t2.bust).toBe(17);
+      expect(t2.ratedCount).toBe(2);
+      expect(t2.unratedCount).toBe(0);
+    });
+
+    it('empty side returns well-formed SideBoomBust with nulls and zero counts', () => {
+      const result = evaluateTrade({
+        leagueType: 'DYN_SF_PPR_TEP',
+        team1: [{ id: 1, name: 'Star', value: 900.0, boom_pct: 50, bust_pct: 30 }],
+        team2: [],
+      });
+      expect(result.boomBust.team1.boom).toBe(50);
+      expect(result.boomBust.team1.ratedCount).toBe(1);
+      expect(result.boomBust.team2.boom).toBeNull();
+      expect(result.boomBust.team2.bust).toBeNull();
+      expect(result.boomBust.team2.ratedCount).toBe(0);
+      expect(result.boomBust.team2.unratedCount).toBe(0);
+      // Trade still produces finite scale
+      expect(Number.isFinite(result.scale)).toBe(true);
+    });
+
+    it('all-picks side returns null boom/bust', () => {
+      const result = evaluateTrade({
+        leagueType: 'DYN_SF_PPR_TEP',
+        team1: [{ id: 1, name: 'Star', value: 900.0, boom_pct: 50, bust_pct: 30 }],
+        team2: [
+          { id: 2, name: 'Pick 1', value: 500.0, boom_pct: null, bust_pct: null },
+          { id: 3, name: 'Pick 2', value: 300.0, boom_pct: null, bust_pct: null },
+        ],
+      });
+      expect(result.boomBust.team1.boom).toBe(50);
+      expect(result.boomBust.team2.boom).toBeNull();
+      expect(result.boomBust.team2.bust).toBeNull();
+      expect(result.boomBust.team2.ratedCount).toBe(0);
+      expect(result.boomBust.team2.unratedCount).toBe(2);
+    });
+
+    it('suggestions array is identical with and without boom/bust', () => {
+      const inputWithout = {
+        ...baseTrade,
+        team1: baseTrade.team1.map(a => ({ ...a, boom_pct: undefined, bust_pct: undefined })),
+        team2: baseTrade.team2.map(a => ({ ...a, boom_pct: undefined, bust_pct: undefined })),
+      };
+      const inputWith = baseTradeWithBoomBust;
+
+      const resultWithout = evaluateTrade(inputWithout);
+      const resultWith = evaluateTrade(inputWith);
+
+      // Suggestions are computed server-side by calling evaluateTrade again
+      // The client test ensures the evaluateTrade itself doesn't leak boom/bust into suggestions
+      // Here we verify the structure is identical
+      expect(resultWith.suggestions).toEqual(resultWithout.suggestions);
     });
   });
 

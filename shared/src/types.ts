@@ -105,6 +105,19 @@ export interface TradeSuggestion {
   resultingVerdict: string;
 }
 
+/** Value-weighted average boom/bust for a trade side. Descriptive only —
+ *  never an input to scale, verdict, lean, or suggestions. */
+export interface SideBoomBust {
+  /** Value-weighted mean boom %, 0–100, integer. Null when no rated asset on this side. */
+  boom: number | null;
+  /** Value-weighted mean bust %, 0–100, integer. Null when no rated asset on this side. */
+  bust: number | null;
+  /** How many assets on this side contributed to the average. */
+  ratedCount: number;
+  /** How many assets on this side were excluded for having no rating (picks, ungenerated players). */
+  unratedCount: number;
+}
+
 export interface TradeResult {
   leagueType: string;
   team1: TradeSide;
@@ -122,4 +135,10 @@ export interface TradeResult {
   /** Up to 3 assets that would move the trade toward Fair, closest fit first.
    *  Empty when the verdict is already Fair trade. */
   suggestions: TradeSuggestion[];
+  /** Value-weighted average boom/bust for each side. Descriptive only —
+   *  never an input to scale, verdict, lean, or suggestions. */
+  boomBust: {
+    team1: SideBoomBust;
+    team2: SideBoomBust;
+  };
 }

@@ -55,6 +55,8 @@ router.get('/', (req, res) => {
         WHEN a.kind = 'player' THEN p.age
         ELSE NULL
       END as age,
+      CASE WHEN a.kind = 'player' THEN p.boom_pct ELSE NULL END as boom_pct,
+      CASE WHEN a.kind = 'player' THEN p.bust_pct ELSE NULL END as bust_pct,
       av.value
     FROM asset_values av
     JOIN assets a ON a.id = av.asset_id

@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useLeagueType } from '../context/LeagueTypeContext.js';
 import AssetSearch from '../components/AssetSearch.js';
 import TradeScale from '../components/TradeScale.js';
-import { getWeight, computeTradeSuggestions, type TradeSuggestion } from '@empire-fantasy/shared';
+import { getWeight, computeTradeSuggestions, type TradeSuggestion, type SideBoomBust } from '@empire-fantasy/shared';
 
 interface SelectedAsset {
   asset_id: number;
@@ -38,6 +38,10 @@ interface TradeResult {
   valueAdjustment: number | null;
   valueAdjustmentSide: 1 | 2 | null;
   suggestions: TradeSuggestion[];
+  boomBust: {
+    team1: SideBoomBust;
+    team2: SideBoomBust;
+  };
 }
 
 export default function Calculator() {
@@ -253,6 +257,67 @@ export default function Calculator() {
               </span>
             )}
           </div>
+
+          {/* Boom / Bust Profile Panel */}
+          {(() => {
+            const bb1 = result.boomBust.team1;
+            const bb2 = result.boomBust.team2;
+            const hasAnyRated = (bb1.ratedCount > 0 || bb2.ratedCount > 0);
+            if (!hasAnyRated) return null;
+
+            const showBoomDelta = bb1.boom !== null && bb2.boom !== null;
+            const showBustDelta = bb1.bust !== null && bb2.bust !== null;
+            const boomDelta = showBoomDelta ? (bb2.boom! - bb1.boom!) : null;
+            const bustDelta = showBustDelta ? (bb2.bust! - bb1.bust!) : null;
+
+            return (
+              <div className="boom-bust-compare">
+                <div className="boom-bust-compare__header">
+                  <span className="boom-bust-compare__label"></span>
+                  <span className="boom-bust-compare__col boom-bust-compare__col--boom">BOOM</span>
+                  <span className="boom-bust-compare__col boom-bust-compare__col--bust">BUST</span>
+                </div>
+                <div className="boom-bust-compare__row">
+                  <span className="boom-bust-compare__side">TEAM 1</span>
+                  <span className="boom-bust-compare__val boom-bust-compare__val--boom">
+                    {bb1.boom !== null ? `${bb1.boom}%` : '—'}
+                  </span>
+                  <span className="boom-bust-compare__val boom-bust-compare__val--bust">
+                    {bb1.bust !== null ? `${bb1.bust}%` : '—'}
+                  </span>
+                </div>
+                {bb1.unratedCount > 0 && (
+                  <div className="boom-bust-compare__coverage">excludes {bb1.unratedCount} unrated</div>
+                )}
+                <div className="boom-bust-compare__row">
+                  <span className="boom-bust-compare__side">TEAM 2</span>
+                  <span className="boom-bust-compare__val boom-bust-compare__val--boom">
+                    {bb2.boom !== null ? `${bb2.boom}%` : '—'}
+                  </span>
+                  <span className="boom-bust-compare__val boom-bust-compare__val--bust">
+                    {bb2.bust !== null ? `${bb2.bust}%` : '—'}
+                  </span>
+                </div>
+                {bb2.unratedCount > 0 && (
+                  <div className="boom-bust-compare__coverage">excludes {bb2.unratedCount} unrated</div>
+                )}
+                {(showBoomDelta || showBustDelta) && (
+                  <div className="boom-bust-compare__delta">
+                    {showBoomDelta && (
+                      <span className={`boom-bust-compare__delta-item ${boomDelta! > 0 ? 'delta--pos' : boomDelta! < 0 ? 'delta--neg' : ''}`}>
+                        Team 2 gets {boomDelta! > 0 ? '+' : ''}{boomDelta} boom
+                      </span>
+                    )}
+                    {showBustDelta && (
+                      <span className={`boom-bust-compare__delta-item ${bustDelta! > 0 ? 'delta--pos' : bustDelta! < 0 ? 'delta--neg' : ''}`}>
+                        Team 2 gets {bustDelta! > 0 ? '+' : ''}{bustDelta} bust
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {/* Trade Suggestions Panel */}
           {result.suggestions && result.suggestions.length > 0 && (

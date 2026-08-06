@@ -42,15 +42,19 @@ Key properties:
 - **Adjustment reported on Fair trades too** — it's a structural roster-spot correction, not a "someone is losing" signal. Only when both sides have identical depth penalties (e.g., 1-for-1, or 2-for-2 in current weight scheme) is it 0 / null.
 - **valueAdjustment ≠ adviceGap**. `adviceGap` = "add a ~540-value player to even this out" (losing-side additive). `valueAdjustment` = the roster-spot credit. Both exist in the response.
 
+### Direction convention
+
+**Team 1 and Team 2 are the sides *receiving* assets.** The side with the higher `sideValue` (raw sum + value adjustment) received more value and is the side the trade favors. This convention is used everywhere: `diff = sideTotal1 − sideTotal2`; when `diff > 0`, Team 1 received more and the trade favors Team 1; when `diff < 0`, Team 2 received more and the trade favors Team 2.
+
 ### Step 3 — verdict
 
 ```
-diff    = sideTotal1 − sideTotal2           # >0 means Team 1 gives more, i.e. trade favors Team 2
+diff    = sideTotal1 − sideTotal2           # >0 means Team 1 receives more, trade favors Team 1
 total   = sideTotal1 + sideTotal2
 lean    = diff / max(total, 1)              # -1..1
 ```
 
-Map lean to a **display scale from −100 (favors Team 1) to +100 (favors Team 2)**: `scale = round(lean * 300)` clamped to ±100 (×300 so a 1/3 imbalance pegs the meter). Bands:
+Map lean to a **display scale from −100 (favors Team 1) to +100 (favors Team 2)**: `scale = round(-lean * 300)` clamped to ±100 (×300 so a 1/3 imbalance pegs the meter). Bands:
 
 | |lean| | Verdict |
 |---|---|
@@ -163,7 +167,7 @@ The adjustment updates as players are added to either side — it is not a stati
 Depth weights, band thresholds — all in one exported `TRADE_CONSTANTS` object in `shared/value.ts`. Unit-test invariants:
 
 1. Equal single players → scale 0, "Fair trade".
-2. One 950 vs three 550s → favors the 950 side (depth weighting only).
+2. One 950 vs three 550s → favors the three 550s side (Team 2 receives more total value).
 3. One 950 vs three 550s in the other order → symmetric result (sign flips exactly).
 4. Adding a 100-value throw-in to a landslide barely moves the scale.
 5. Weights monotone non-increasing.
@@ -172,6 +176,59 @@ Depth weights, band thresholds — all in one exported `TRADE_CONSTANTS` object 
 8. **McMillan / Harrison+Stowers example ⇒ Fair trade with valueAdjustment ≈ 23.7 to Team 1.**
 9. **Adding a piece to either side changes the adjustment (not static).**
 10. **Adjusted totals produce identical verdict as old weighted-sum math across a table of fixtures (regression guard).**
+11. **Label/sign agreement: a verdict naming Team 1 always carries scale < 0; a verdict naming Team 2 always carries scale > 0.**
+
+## Boom / Bust Profile (Descriptive Only)
+7. **1-for-2 ⇒ adjustment goes to the one-player side, equals that side's depth-penalty shortfall.**
+8. **McMillan / Harrison+Stowers example ⇒ Fair trade with valueAdjustment ≈ 23.7 to Team 1.**
+9. **Adding a piece to either side changes the adjustment (not static).**
+10. **Adjusted totals produce identical verdict as old weighted-sum math across a table of fixtures (regression guard).**
+
+## Boom / Bust Profile (Descriptive Only)
+
+When the trade evaluator receives assets with `boom_pct` and `bust_pct` (integer 0–100, or null for unrated assets/picks), it computes value-weighted averages for each side and attaches them to the response as `boomBust`. **This is purely descriptive — it never affects scale, verdict, lean, valueAdjustment, adviceGap, or suggestions.**
+
+### Averaging Formula
+
+For each side, the average is a value-weighted mean over **rated assets only** (assets where at least one of boom/bust is non-null):
+
+```
+boom = Σ(value_i × boom_pct_i) / Σ(value_i)   for all i where boom_pct_i ≠ null
+bust = Σ(value_i × bust_pct_i) / Σ(value_i)   for all i where bust_pct_i ≠ null
+```
+
+- **Weight is raw value**, not the depth weight (`getWeight(i)`). Using depth weights would couple the overlay to the verdict pipeline and make a side's boom number change based on how many other pieces are in the trade.
+- **Unrated assets (picks, ungenerated players) are excluded from both numerator and denominator**. They are not treated as 0, and they do not shrink the result by staying in the denominator. They are counted in `unratedCount` for the coverage note.
+- **Round to integer** with `Math.round`. These are integer percentages matching the players table. Do not use `clampRound` or `round1` — those belong to the 1.0–1000.0 value scale.
+- **Return `null` when no rated assets** (empty side, all-picks side, or all ungenerated players). Do not return 0 — zero is a real rating and means something different from "unknown."
+- **Boom and bust are independent** — each uses its own denominator. In practice they're always both set or both null, but the function does not assume this.
+
+### Response Shape Additions
+
+```json
+{
+  "boomBust": {
+    "team1": { "boom": 40, "bust": 25, "ratedCount": 1, "unratedCount": 0 },
+    "team2": { "boom": 57, "bust": 17, "ratedCount": 2, "unratedCount": 0 }
+  }
+}
+```
+
+`boomBust` is always present — both sides always return an object with the four fields. Never null or absent at the top level.
+
+### Regression Guard
+
+The primary test invariant: **for every fixture, the six verdict fields (`scale`, `verdict`, `differencePct`, `adviceGap`, `valueAdjustment`, `valueAdjustmentSide`) are bit-for-bit identical whether or not boom/bust is supplied on the input assets.** If any changes, the implementation has leaked the overlay into the verdict pipeline — find and fix the leak, do not "re-tune" the constants.
+
+### Why Raw Value Weighting (Not Depth Weighting)
+
+The depth weights model roster scarcity in the verdict math. If the boom overlay used depth weights, a side's average boom would change simply by adding or removing a throw-in piece, even though the underlying players haven't changed. Raw value weighting makes the overlay stable and intuitive: the average represents the value-weighted volatility profile of the assets actually being traded.
+
+### Unrated Assets and Coverage
+
+Picks are always unrated. Players may be unrated if `scripts/generate-boom-bust.ts` hasn't covered them. An excluded asset must not be silently treated as 0, and must not shrink the result by staying in the denominator.
+
+When a side has `unratedCount > 0`, the UI renders a coverage note: "excludes N unrated". This is mandatory — in Dynasty, a package of one player plus three picks would otherwise show a confident-looking average that describes a single asset.
 
 ## Edge cases
 
