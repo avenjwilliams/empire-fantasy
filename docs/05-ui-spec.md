@@ -42,39 +42,108 @@ Persistent top bar: `EMPIRE FANTASY` wordmark left; tabs: **Calculator · Rankin
 - Expandable **"Show the math"** panel: per-asset breakdown (linear value → curved trueValue → slot weight → weighted contribution), **plus new per-side breakdown showing rawSum, depthPenalty, and adjustment**, and formula caption updated from "linear depth-weighted sum" to describe the credit framing. Toggled via dashed-border button below the verdict.
 - Evaluation auto-runs on every change (debounced); no submit button.
 
+### Trade Calculator — Boom / Bust Profile Panel
+
+Positioned inside `.calc-result`, after `.calc-result__details` and before the "Players to Even Trade" suggestions panel. It describes the trade as constructed, so it belongs with the verdict, above the prescriptive suggestions.
+
+**Layout — side-by-side comparison with delta line:**
+
+```
+              BOOM      BUST
+  TEAM 1       41%       28%
+  TEAM 2       53%       19%
+  ─────────────────────────────
+  Team 2 gets +12 boom, −9 bust
+```
+
+- Team 1 and Team 2 rows, each with a boom and a bust figure, aligned in columns so they read as a direct comparison.
+- Below them, a delta line. Compute `boomDelta = team2.boom − team1.boom` and the same for bust, and phrase it in terms of the side receiving more boom: "Team 2 gets +12 boom, −9 bust." Use the existing `.delta--pos` / `.delta--neg` color tokens on the signed numbers.
+- Render the delta line only when **both** sides have a non-null value for that metric. If one side is unrated, there's no comparison to draw — show the available side's numbers and omit the delta rather than comparing against nothing.
+- Boom figures in `var(--positive)`, bust in `var(--negative)`, monospace, matching the density of the surrounding result panel. No new colors.
+- Null renders as a muted `—`.
+
+**Coverage note (required).** When a side has `unratedCount > 0`, render a small muted line beneath that side's row: "excludes 2 unrated" (or "excludes 1 unrated"). This is not optional polish — in Dynasty, a package of one player plus three picks would otherwise show a confident-looking average that describes a single asset. The user needs to see the average's coverage.
+
+**States:**
+
+1. **Both sides rated** → full panel with delta line.
+2. **One side entirely unrated** (empty side, or all picks) → that side's row shows `—`, delta line omitted, coverage note still shown on the side that has exclusions.
+3. **Neither side has a single rated asset** → omit the whole panel. Nothing to say.
+
+**Responsive:** At mobile width, the panel stacks rather than squashes, consistent with how `.calc-result__details` already adapts (see `@media (max-width: 768px)` block in `theme.css`).
+
+**CSS classes:** `.boom-bust-compare`, `.boom-bust-compare__header`, `.boom-bust-compare__label`, `.boom-bust-compare__col`, `.boom-bust-compare__col--boom`, `.boom-bust-compare__col--bust`, `.boom-bust-compare__row`, `.boom-bust-compare__side`, `.boom-bust-compare__val`, `.boom-bust-compare__val--boom`, `.boom-bust-compare__val--bust`, `.boom-bust-compare__coverage`, `.boom-bust-compare__delta`, `.boom-bust-compare__delta-item`.
+
+**Important:** Do not reuse the `.boom-bust` track markup from PlayerDetail.tsx — that block belongs to the profile page and the result panel is already tall. Do not modify it.
+
 ### 2. Rankings (`/rankings`)
 
-- Table for current league type: overall rank, positional rank (e.g. WR4), name, position, team, age, value.
-- Controls: position filter tabs (ALL · QB · RB · WR · TE · PICKS when DYN), text search, sort by value default.
-- Row click → Player detail (`/player/:assetId`): metadata, value across **all 24 league types** (compact grid), value-over-time line chart (league type selector), recent adjustment log entries for that player.
+- Table for current league type: overall rank (#), positional rank (Pos), name, position (Pos badge), team, age, **Boom**, **Bust**, value.
+- Controls: position filter tabs (ALL · QB · RB · WR · TE · PICKS when DYN), text search.
+- **Sortable columns**: Value, Boom, Bust, Age. Non-sortable: #, Pos, Name, Team.
+- **Default state**: unsorted — renders in the API's natural value DESC order (byte-identical to no-sort behavior).
+- **Three-state sort cycle**: clicking a sortable header cycles descending → ascending → default (unsorted). The third click returns to the canonical view.
+- **Single-column sort**: only one column sorts at a time; clicking a new header replaces the previous sort.
+- **Sort reset**: sort state resets to default when the position tab or league type changes. It does **not** reset on search input — filtering and sorting compose.
+- **Null handling**: nulls (picks, unrated players) sort to the bottom in **both** directions. Not treated as 0 or -Infinity.
+- **Tie-breaking**: equal values break by overallRank ascending for stable, meaningful ordering.
+- **Rank columns do not renumber on sort**: overallRank (#) and positionalLabel (Pos) are identity computed server-side from value order. They travel with their rows. After sorting by Boom, the top row might read #47 / WR12 — this is correct. Do not recompute rank client-side.
+- **Header affordance**: sortable headers are `<button>` elements with pointer cursor, monospace sort indicator (▼ desc, ▲ asc, none for default), and `aria-sort` attribute. Keyboard accessible (Enter/Space).
+- **Sticky header**: thead is `position: sticky; top: 0; z-index: 10` — header markup must not break this.
+- Row click → Player detail (`/player/:assetId`): header shows pos-badge, name/team/age/status plus two rank badges (POS, e.g. "RB2", and OVR, e.g. "#4") when ranks exist; a hero row with the current value + label and, for players, boom/bust rings (picks get the value only, no rings); a trend row showing 7-day and 30-day value change with "—" when there isn't an old-enough snapshot; the value-across-all-24-formats grid now behind a "Show all 24 formats" disclosure (closed by default); the value-over-time chart with a 30D / 90D / ALL range toggle; and the recent adjustment log now behind a "Recent adjustments (N)" disclosure (closed by default).
 - Virtualize or paginate at 100 rows.
+
+**Mobile (< 768px)**: Boom and Bust columns hidden (`display: none` on both th/td). Remaining columns still sortable. Table horizontally scrolls for rank/name/value.
 
 ### Player Detail — Boom / Bust Section
 
-Positioned directly below the detail header and above the "Value Across All League Types" grid. This is a player trait, so it belongs with the identity block.
+Two independent donut-gauge rings sit in the player detail **hero row**, to the right of the
+value, above the trend row. Boom uses `var(--positive)`, bust uses `var(--negative)`.
 
-**Visual: two independent full-width tracks, stacked**
+**Visual: two side-by-side SVG rings**
 
 ```
-BOOM  ███████████░░░░░░░░░░░░░░░░░░░░░░░░  38%
-BUST  ██████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░  21%
+  [  ████░░░░░░  38% ]   [  ██░░░░░░░░  21% ]
+        BOOM                  BUST
 ```
 
-- `boomPct` and `bustPct` are generated independently and can sum to more than 100. They are **not** two slices of one pie.
-- Do **not** render as segments of a single 100%-wide bar with an implied "steady" remainder. That visual asserts `boom + bust + steady = 100`, which is false.
-- Instead render two aligned full-width tracks, stacked, each on its own 0–100 scale. Both tracks are the same width and share the same 0–100 baseline, so the bars stay directly comparable while each remains an honest reading of its own number.
-- Beside or above the tracks, show the two numbers as large stat callouts, styled like the existing accent value in `.detail-header` (`font-mono`, bold, large). Label them `BOOM` and `BUST`.
-- Boom uses the existing green (`--positive`, reused from `.delta--pos` / `.pos-badge--RB`); bust uses the existing red (`--negative`, reused from `.delta--neg` / `.pos-badge--QB`). **No new colors.**
-- Retro terminal theme only. Square corners, monospace, no gradients, no rounded cards, no animation on load.
-- CSS classes: `.boom-bust`, `.boom-bust__tracks`, `.boom-bust__track`, `.boom-bust__label-row`, `.boom-bust__label`, `.boom-bust__label--boom`, `.boom-bust__label--bust`, `.boom-bust__value`, `.boom-bust__value--boom`, `.boom-bust__value--bust`, `.boom-bust__bar`, `.boom-bust__fill`, `.boom-bust__fill--boom`, `.boom-bust__fill--bust`.
+- Ring spec (hard numbers, do not derive): `viewBox="0 0 86 86"`, `cx/cy = 43`, `r = 34`,
+  `stroke-width = 9`, circumference `213.6`. Track circle is full `var(--bg-hover)`. Value arc
+  uses `stroke-dasharray = (pct/100)*213.6 , 213.6 - (pct/100)*213.6` with
+  `transform="rotate(-90 43 43)"` so the arc opens from 12 o'clock.
+- Centered inside each ring: the percentage (~20px) in the arc's color (boom
+  `--positive`, bust `--negative`), and below it the label `BOOM` / `BUST` (~10px,
+  `--ink-muted`).
+- `boomPct` and `bustPct` are generated independently and can sum to more than 100. They are
+  two separate rings, **not** two halves of one dial — do not imply a "steady" remainder or a
+  shared 100% baseline.
+- Retro terminal theme only. Square corners, monospace numbers, 2px track strokes, no
+  gradients, no shadows, no load animation on the rings.
+- CSS: `.player-hero`, `.player-hero__value`, `.player-hero__label`, `.player-hero__rings`,
+  `.ring`, `.ring__pct`, `.ring__label`.
 
 **Required states:**
 
-1. **Player with ratings** → the section as described above, both tracks fill proportionally, numbers match DB.
-2. **Player with null ratings** (generator hasn't run) → render the section with a muted `—` in place of each number and empty tracks. Do **not** hide the section; the user needs to see that the rating is absent rather than assume it's zero.
-3. **Pick** (`data.kind === 'pick'`) → omit the section entirely. Picks have no boom/bust and an empty section would be noise.
+1. **Player with ratings** → both rings draw proportional arcs, numbers match DB.
+2. **Player with null ratings** (`boom_pct` or `bust_pct` null) → that ring shows an empty
+   arc (track only) with a muted `—` where the percentage goes. Do **not** hide the ring and
+   do **not** draw it as 0%.
+3. **Pick** (`data.kind === 'pick'`) → the ring side of the hero is omitted entirely; the
+   value sits alone. Picks have no boom/bust and an empty ring would be noise. (Rank badges
+   in the header do render for picks in Dynasty — `positionalLabel` reads e.g. "PICK3".)
 
-**Responsive:** At mobile width, the tracks and callouts stack rather than squash, consistent with how `.detail-header` and `.value-card` already adapt (see `@media (max-width: 768px)` block in `theme.css`).
+**Responsive (< 768px):** hero stacks value above the rings; rings shrink (72px) but stay
+side by side; rank badges wrap under the name. Consistent with the existing
+`@media (max-width: 768px)` block.
+
+- **Header rank badges**: two badges replace the bare value in the `.detail-header` right
+  side — `POS` above `positionalLabel` (accent, 2px accent border) and `OVR` above
+  `#${overallRank}` (ink, 2px default border). Both null → render neither. Picks render them
+  in Dynasty (`positionalLabel` reads "PICK3").
+- **Trend row**: two readouts, `7D` and `30D`, for value change computed client-side. Each is
+  `currentValue − most recent snapshot with date ≤ (today − N days)`, shown `.toFixed(1)` with
+  an explicit sign and the existing `delta--pos` / `delta--neg` / `delta--zero` colors. A
+  window with no old-enough snapshot shows `—` (never a fabricated `0.0`).
 
 ### 3. Keep / Trade / Cut (`/ktc`)
 

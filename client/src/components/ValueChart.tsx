@@ -17,6 +17,7 @@ interface HistoryEntry {
 interface ValueChartProps {
   history: HistoryEntry[];
   leagueType: string;
+  rangeDays?: number | null;
 }
 
 const CHART_COLORS = {
@@ -33,19 +34,53 @@ function formatDate(dateStr: string): string {
   return `${m}/${d}`;
 }
 
-export default function ValueChart({ history, leagueType }: ValueChartProps) {
-  // Filter to selected league type and sort chronologically
-  const data = history
-    .filter(h => h.leagueType === leagueType)
-    .sort((a, b) => a.date.localeCompare(b.date))
-    .map(h => ({ date: h.date, value: h.value }));
+// YYYY-MM-DD for `days` days ago, matched lexicographically against date strings.
+function isoDaysAgo(days: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() - days);
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${d.getFullYear()}-${m}-${day}`;
+}
 
-  if (data.length < 2) {
+export default function ValueChart({ history, leagueType, rangeDays = null }: ValueChartProps) {
+  // Filter to selected league type and sort chronologically (outer series).
+  const leagueSeries = history
+    .filter(h => h.leagueType === leagueType)
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  // No history at all for the league type gets its own empty copy.
+  if (leagueSeries.length === 0) {
     return (
       <div className="chart-empty">
-        {data.length === 0
-          ? 'No history yet — values are recorded daily.'
-          : 'Chart available once more history accumulates.'}
+        No history yet — values are recorded daily.
+      </div>
+    );
+  }
+
+  // Apply the range window after the league-type filter, keeping chart logic in one place.
+  let filtered = leagueSeries;
+  if (rangeDays !== null) {
+    const cutoff = isoDaysAgo(rangeDays);
+    filtered = leagueSeries.filter(h => h.date >= cutoff);
+  }
+
+  // No points fall inside the selected range — distinct from "no history".
+  if (filtered.length === 0) {
+    return (
+      <div className="chart-empty">
+        No value history inside this range — widen the window to see the series.
+      </div>
+    );
+  }
+
+  const data = filtered.map(h => ({ date: h.date, value: h.value }));
+
+  // One point (whether from a range filter or the full series).
+  if (data.length === 1) {
+    return (
+      <div className="chart-empty">
+        Chart available once more history accumulates.
       </div>
     );
   }
@@ -80,7 +115,7 @@ export default function ValueChart({ history, leagueType }: ValueChartProps) {
             tick={{ fill: CHART_COLORS.axis, fontSize: 11, fontFamily: 'IBM Plex Mono, monospace' }}
             axisLine={false}
             tickLine={false}
-            width={36}
+            width={48}
           />
           <Tooltip
             contentStyle={{
