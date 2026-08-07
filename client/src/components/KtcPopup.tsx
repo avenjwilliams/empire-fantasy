@@ -85,20 +85,6 @@ export default function KtcPopup() {
     && !assignments.has(null as any)
     && [...assignments.values()].every(v => v !== null);
 
-  const skip = () => {
-    if (!prompt) return;
-    // Mark this prompt skipped on the server so we get a fresh trio
-    fetch(`/api/ktc/skip`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({ promptId: prompt.promptId }),
-    })
-      .then(r => { if (!r.ok) throw new Error('Skip failed'); return r.json(); })
-      .then(() => fetchPrompt())
-      .catch(() => setStatus('error'));
-  };
-
   const submit = () => {
     if (!prompt || !allAssigned) return;
     setStatus('submitting');
@@ -190,8 +176,7 @@ export default function KtcPopup() {
               </button>
               <button
                 className="ktc-btn"
-                onClick={skip}
-                disabled={status === 'submitting'}
+                onClick={dismiss}
               >
                 Skip
               </button>

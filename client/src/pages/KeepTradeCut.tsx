@@ -99,6 +99,7 @@ export default function KeepTradeCut() {
 
   const skip = () => {
     if (!prompt) return;
+    setStatus('submitting');
     fetch('/api/ktc/skip', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
