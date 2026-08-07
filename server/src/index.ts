@@ -12,6 +12,7 @@ import assetsRouter from './routes/assets.js';
 import logRouter from './routes/log.js';
 import tradeRouter from './routes/trade.js';
 import ktcRouter from './routes/ktc.js';
+import commentsRouter from './routes/comments.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3001;
@@ -40,6 +41,7 @@ app.use('/api/assets', assetsRouter);
 app.use('/api/log', logRouter);
 app.use('/api/trade', tradeRouter);
 app.use('/api/ktc', ktcRouter);
+app.use('/api/comments', commentsRouter);
 
 // In production, serve the built React client
 if (isProduction) {
@@ -124,6 +126,7 @@ async function cleanupRetiredPlayers(db: ReturnType<typeof initDb>) {
       db.prepare(`DELETE FROM adjustment_log WHERE asset_id IN (${assetPH})`).run(...assetIds);
       db.prepare(`DELETE FROM asset_values WHERE asset_id IN (${assetPH})`).run(...assetIds);
       db.prepare(`DELETE FROM value_history WHERE asset_id IN (${assetPH})`).run(...assetIds);
+      db.prepare(`DELETE FROM comments WHERE asset_id IN (${assetPH})`).run(...assetIds);
     }
     if (toRemove.length > 0) {
       db.prepare(`DELETE FROM weekly_stats WHERE player_id IN (${placeholders})`).run(...toRemove);

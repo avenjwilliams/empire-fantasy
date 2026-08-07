@@ -143,6 +143,18 @@ CREATE TABLE weekly_stats (
   raw JSON NOT NULL,              -- Sleeper stat object
   PRIMARY KEY (player_id, season, week)
 );
+
+CREATE TABLE comments (
+  id INTEGER PRIMARY KEY,
+  asset_id INTEGER NOT NULL REFERENCES assets(id),
+  session_id TEXT NOT NULL REFERENCES sessions(id),
+  team_code TEXT,                    -- NULL = user picked Classic / no team
+  body TEXT NOT NULL,
+  created_at TEXT DEFAULT (datetime('now')),
+  deleted_at TEXT
+);
+CREATE INDEX idx_comments_asset ON comments(asset_id, created_at DESC);
+CREATE INDEX idx_comments_session ON comments(session_id, created_at);
 ```
 
 Indexes: `adjustment_log(asset_id, league_type_id)`, `adjustment_log(created_at)`, `value_history(asset_id, league_type_id)`.
@@ -159,6 +171,9 @@ GET  /api/ktc/prompt[?leagueType=CODE]                     # creates/returns pro
 POST /api/ktc/vote              { promptId, keep, trade, cut }
 POST /api/ktc/skip              { promptId }               # mark prompt skipped, next GET /prompt yields fresh trio
 GET  /api/log?assetId=&leagueType=&limit=                  # adjustment log browser
+GET  /api/comments/:assetId?limit=&offset=                 # discussion thread (newest first, 50/page default)
+POST /api/comments/:assetId          { body, teamCode }   # teamCode null for Classic
+DELETE /api/comments/:commentId      # soft delete, session-scoped
 ```
 
 Trade evaluation is **stateless** (no DB write) — it reads current values and computes.
@@ -222,6 +237,33 @@ Trade evaluation is **stateless** (no DB write) — it reads current values and 
 - Max 15 assets per side → 400
 - Duplicate asset on both sides → 400
 - Picks in Redraft league types → 400
+
+## Comments API
+
+Flat, anonymous, per-asset discussion threads. One thread per asset (no league_type_id, no parent_id). Comments are completely orthogonal to values — they never touch `asset_values` or `adjustment_log` (CLAUDE.md hard rule 2 applies to asset_values only).
+
+### Schema notes
+- `team_code` is **snapshotted at write time** and nullable. A user who switches their theme from Dallas to Philadelphia keeps `Anonymous Cowboys Fan` on everything they already posted. Deriving the name at read time would rewrite both halves of a past argument.
+- `team_code` is NULL for Classic/no team; renders as `Anonymous Fan`. No default to a team.
+- No CHECK constraint on `team_code` — validation is in the service layer against `NFL_TEAM_CODES` (from shared), so a relocation is a one-line shared change rather than a migration.
+- `deleted_at` is a soft delete — the row survives, the API filters it out.
+- `asset_id`, not `player_id`. Picks are assets and get threads too; no special-casing.
+- The session index is for the per-session daily-count query (would otherwise scan).
+
+### Author name composition (server-side, single source of truth)
+`authorName` is composed server-side from `team_code`:
+- `team_code` present → `Anonymous ${nickname} Fan` (e.g. `Anonymous Cowboys Fan`)
+- `team_code` null → `Anonymous Fan`
+
+The client must **never** build this string; one place, one format.
+
+### Security: session_id is the auth token
+`isMine` is `session_id === req.sessionId`. It drives the delete button and is the only reason the client needs to know anything about sessions.
+
+**Never return `session_id` itself** — it's the auth token in a cookie, and echoing it into a public JSON list of everyone's comments would hand every visitor's session to every other visitor. This is the one genuine security issue in the feature.
+
+### The cleanup trap
+`cleanupRetiredPlayers()` hard-deletes assets under `PRAGMA foreign_keys = OFF`. It would orphan comment rows if it didn't also delete them. The migration-006 cleanup block deletes comments alongside `adjustment_log`, `asset_values`, and `value_history` keyed on the same `assetIds` list.
 
 ## Sessions & rate limiting
 

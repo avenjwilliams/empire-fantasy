@@ -93,3 +93,57 @@ export const INACTIVE_FLOOR = 1.0;
 
 /** Inactive decay: only decay players above this value */
 export const INACTIVE_MIN_VALUE = 50;
+
+// =====================================================
+// NFL Team identity (shared so server can validate team codes)
+// =====================================================
+
+export interface NflTeam {
+  code: string;      // 'DAL' — matches the players.team convention
+  city: string;      // 'Dallas'
+  nickname: string;  // 'Cowboys' — this is what appears in the author name
+}
+
+export const NFL_TEAMS: readonly NflTeam[] = [
+  { code: 'ARI', city: 'Arizona', nickname: 'Cardinals' },
+  { code: 'ATL', city: 'Atlanta', nickname: 'Falcons' },
+  { code: 'BAL', city: 'Baltimore', nickname: 'Ravens' },
+  { code: 'BUF', city: 'Buffalo', nickname: 'Bills' },
+  { code: 'CAR', city: 'Carolina', nickname: 'Panthers' },
+  { code: 'CHI', city: 'Chicago', nickname: 'Bears' },
+  { code: 'CIN', city: 'Cincinnati', nickname: 'Bengals' },
+  { code: 'CLE', city: 'Cleveland', nickname: 'Browns' },
+  { code: 'DAL', city: 'Dallas', nickname: 'Cowboys' },
+  { code: 'DEN', city: 'Denver', nickname: 'Broncos' },
+  { code: 'DET', city: 'Detroit', nickname: 'Lions' },
+  { code: 'GB', city: 'Green Bay', nickname: 'Packers' },
+  { code: 'HOU', city: 'Houston', nickname: 'Texans' },
+  { code: 'IND', city: 'Indianapolis', nickname: 'Colts' },
+  { code: 'JAX', city: 'Jacksonville', nickname: 'Jaguars' },
+  { code: 'KC', city: 'Kansas City', nickname: 'Chiefs' },
+  { code: 'LAC', city: 'Los Angeles', nickname: 'Chargers' },
+  { code: 'LAR', city: 'Los Angeles', nickname: 'Rams' },
+  { code: 'LV', city: 'Las Vegas', nickname: 'Raiders' },
+  { code: 'MIA', city: 'Miami', nickname: 'Dolphins' },
+  { code: 'MIN', city: 'Minnesota', nickname: 'Vikings' },
+  { code: 'NE', city: 'New England', nickname: 'Patriots' },
+  { code: 'NO', city: 'New Orleans', nickname: 'Saints' },
+  { code: 'NYG', city: 'New York', nickname: 'Giants' },
+  { code: 'NYJ', city: 'New York', nickname: 'Jets' },
+  { code: 'PHI', city: 'Philadelphia', nickname: 'Eagles' },
+  { code: 'PIT', city: 'Pittsburgh', nickname: 'Steelers' },
+  { code: 'SEA', city: 'Seattle', nickname: 'Seahawks' },
+  { code: 'SF', city: 'San Francisco', nickname: '49ers' },
+  { code: 'TB', city: 'Tampa Bay', nickname: 'Buccaneers' },
+  { code: 'TEN', city: 'Tennessee', nickname: 'Titans' },
+  { code: 'WAS', city: 'Washington', nickname: 'Commanders' },
+] as const;
+
+export const NFL_TEAM_CODES: readonly string[] = NFL_TEAMS.map(t => t.code);
+
+/** Returns the nickname for a team code, or null if unknown or null. */
+export function teamNickname(code: string | null): string | null {
+  if (!code) return null;
+  const team = NFL_TEAMS.find(t => t.code === code);
+  return team?.nickname ?? null;
+}
