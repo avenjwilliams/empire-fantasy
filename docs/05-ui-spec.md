@@ -157,4 +157,80 @@ side by side; rank badges wrap under the name. Consistent with the existing
 
 ## Components inventory
 
-`LeagueTypeSelector`, `AssetSearch`, `AssetChip`, `TradeScale`, `VerdictBanner`, `RankingsTable`, `ValueChart` (Recharts line), `KtcCard`, `LogTable`, `ReasonChip`, `SuggestionsPanel`, `BoomBust`.
+`LeagueTypeSelector`, `AssetSearch`, `AssetChip`, `TradeScale`, `VerdictBanner`, `RankingsTable`, `ValueChart` (Recharts line), `KtcCard`, `LogTable`, `ReasonChip`, `SuggestionsPanel`, `BoomBust`, `TeamSelector`, `TeamPicker`, `TeamGrid`.
+
+## Team color themes
+
+The app lets a user pick a favorite NFL team on first visit and recolors itself in that team's colors. The choice persists in `localStorage` under `ef_team`, is changeable any time from a selector in the top bar, and defaults to the current amber "Classic" theme if the user skips.
+
+### The three persistent states (`ef_team`)
+
+`ef_team` is a plain string with three distinguishable states:
+
+| `ef_team` value | meaning | theme | picker shows |
+|---|---|---|---|
+| *(absent)* | never asked | Classic | yes |
+| `'NONE'` | explicitly chose Classic, or skipped | Classic | no |
+| a team code (e.g. `'KC'`) | chose a team | that team | no |
+
+`hasChosen` is `ef_team !== null`, **not** `team !== null`. Storing `null`/`''` for "skipped" and letting it read back as "absent" would re-show the picker on every visit forever. Skipping writes `'NONE'`. There is no way to dismiss the first-visit picker without recording a decision.
+
+### Scope: only three variable groups change per team
+
+`client/src/teamThemes.ts` defines the 33-entry `TEAMS` array (32 franchises + `NONE` Classic) and pure functions to derive the CSS. It lives in `client/`, **not** `shared/` — this is presentation data with no server consumer. The team list is a hardcoded static array; it is deliberately **not** derived from the DB (the `players.team` column currently holds only 29 distinct codes — CLE, LAC, TEN have no rostered players) or any API.
+
+Only the ACCENT and SURFACE groups vary:
+
+| Group | Variables | Source |
+|---|---|---|
+| Accent | `--accent`, `--accent-dim`, `--accent-alt` | team's three colors, contrast-checked |
+| Surface | `--bg`, `--bg-raised`, `--bg-hover`, `--border` | base value tinted toward the team's darkest color |
+| Semantic | `--ink`, `--ink-muted`, `--positive`, `--negative` | **never change** — identical in all 33 themes |
+
+`--font-mono`, `--font-body`, `--radius` also never change.
+
+### Derivation and contrast rules
+
+`resolveTeam(t)` is a pure function (no DOM) returning the var→hex map, so it is unit-testable in node. NONE returns today's `:root` values byte-for-byte (regression guard: "skipping changes nothing").
+
+- **Surface tinting** — never a raw team color as a background. `tint` = the darkest of the team's three colors by relative luminance, then mix it into the base at low weight: `--bg = mix(tint, #0a0e14, 0.12)`, `--bg-raised = mix(tint, #111720, 0.12)`, `--bg-hover = mix(tint, #1a2030, 0.14)`, `--border = mix(tint, #2a3545, 0.2)`. `mix(a, b, w)` is per-channel sRGB interpolation at weight `w` toward `a`, rounded to integer channels — computed in TypeScript (not CSS `color-mix()`), which keeps it unit-testable and browser-support-free.
+  - Teams whose darkest color is near-black (PIT, LV, NO, BAL, CIN, JAX) get a near-no-op tint and land on today's surfaces; they get their identity from the accent. Correct and expected.
+- **Accent selection with a contrast fallback** — chosen mechanically, not by taste: `--accent = first of [primary, secondary, tertiary]` with contrast ratio `>= 4.5:1` against that team's derived `--bg`; if none qualify, lighten the primary in equal steps until one does. `--accent-dim` is the accent darkened toward `--bg` until it lands between `2.0:1` and `3.0:1`. `--accent-alt` is the higher-contrast of the two colors not chosen as accent.
+- **Contrast functions** are exported and WCAG 2.1 (`luminance`, `contrast`).
+
+### The fixed `--severity-mid` (amber) token
+
+`--positive` (green) and `--negative` (red) are **not decoration** — they encode meaning in value deltas, boom/bust bars, trade-scale zones, KTC card borders, KTC role chips, and the trade verdict ramp. They never change.
+
+That is necessary but not sufficient: two ramps previously used `--accent` as the *middle* step between green and red (`.trade-verdict--slight`/`--clear` and `.ktc-role--trade`, plus the `ktc-card--trade` border). Both are ordered severity scales, and for a team whose primary is red or green, an `--accent` in the middle collapses the ramp to two steps (`Slight`/`Clear` blur together with `Landslide`, or `TRADE`/`KEEP` blur together). Roughly a third of the league has a red or green primary, so this is the common case.
+
+Therefore the middle step is a **fixed, non-themable token in `:root`**:
+
+```css
+--severity-mid: #e8a525; /* fixed amber — never themed; middle step of the
+                           verdict and KTC ramps; must stay distinct from
+                           --positive and --negative in every theme */
+```
+
+`.trade-verdict--slight`, `.trade-verdict--clear`, `.ktc-card--trade`, and `.ktc-role--trade` all point at `--severity-mid`. **A future change must never re-point these at `--accent` or a team color** — that reintroduces the ramp-collapse bug for red/green-accented teams. `--severity-mid` is also asserted (in the tests) to never be present in any `resolveTeam()` output, so a theme can't touch it.
+
+### Applying a theme (no flash of default)
+
+Apply vars as inline `style.setProperty()` on `document.documentElement`. Do **not** generate per-team CSS classes or `[data-team]` blocks — that would duplicate the palette in two places and let them drift. `:root` in `theme.css` stays exactly as it is: it remains the fallback for the pre-JS paint and for `NONE`.
+
+The initial read + set loop happens at module scope in `main.tsx` **before** `createRoot().render()` — NOT in a `useEffect`, which would run after first paint and flash amber on every load. `document.documentElement.dataset.team` is also set to the code (visible/greppable in devtools).
+
+### Context
+
+`TeamThemeContext` mirrors `LeagueTypeContext` (localStorage read sync in the initializer, write back in effects, throws outside its provider). `applyTeamTheme(code)` is a separate pure side-effect used both pre-paint and for hover-preview; it clears vars when `code` is `null`/`'NONE'` so classic is a real fallback.
+
+### First-visit picker + persistent selector
+
+- **Picker** (`TeamPicker`) — mounted in `App.tsx` only when `!hasChosen`. Reuses the existing `.ktc-popup` overlay/visual language (same border/radius/backdrop/close). Overlay click, ✕, and **Skip** all write `'NONE'`; there is no way to close without recording. Wired into a shared `TeamGrid`.
+- **Persistent selector** (`TeamSelector`) lives in the top bar, after `LeagueTypeSelector`, collapsed to the current code + three swatches. Above 768px it opens as a dropdown panel; below, it reuses the modal presentation (a 33-item grid in a wrapping top bar is unusable). Closes on outside click and Escape. Its dropdown `z-index` sits above the sticky `.topbar` (100) and the sticky table header (10).
+- **Grid** (`TeamGrid`) is the single shared 33-tile grid (32 teams + Classic). Tiles are real `<button>`s. Hover / focus live-previews the theme via `applyTeamTheme` and reverts to the current selection on leave; committing happens only on click. No logos, no image assets — swatches + text fit the terminal aesthetic.
+- On mobile the selector collapses to code + swatches (label hidden) and shares row 1 with the brand so it never pushes the nav links to an extra row at 375px.
+
+### Tests
+
+`client/teamThemes.test.ts` is pure color math (node env, reported to vitest's config — no React/jsdom). It asserts: 33 entries with the DB-convention codes (e.g. GB, KC, LV, SF, TB, NE, NO, JAX, WAS, LAR, LAC, CLE, TEN) present; all hexes valid; for every theme `contrast(--ink, --bg) >= 7.0`, `contrast(--accent, --bg) >= 4.5`, `--accent-dim` in `[2.0, 3.0]`; `resolveTeam(NONE)` reproduces today's `:root` values byte-for-byte; and no theme sets a semantic or `--severity-mid` key (an attempt to theme one fails the build). `--accent` vs `--positive`/`--negative` collision distances are logged (a red accent is legitimate) but not asserted.

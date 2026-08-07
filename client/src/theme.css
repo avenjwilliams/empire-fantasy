@@ -14,6 +14,12 @@
   --negative:    #ff5252;
   --border:      #2a3545;
 
+  /* fixed amber — never themed; middle step of the verdict and KTC ramps.
+     Must stay distinct from --positive and --negative in every team theme,
+     so it must NOT be accent-derived (a red or green primary would collapse
+     the ramp). No team theme may override this. */
+  --severity-mid: #e8a525;
+
   --font-mono:   'IBM Plex Mono', 'Space Mono', monospace;
   --font-body:   'IBM Plex Mono', monospace;
 
@@ -91,6 +97,132 @@ a:hover { text-decoration: underline; }
 .topbar__nav a.active {
   color: var(--accent);
   border-color: var(--accent);
+}
+
+/* ---- Team Color Selector ---- */
+.team-selector {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.team-selector__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: transparent;
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--ink-muted);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  padding: 0.25rem 0.5rem;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+.team-selector__toggle:hover {
+  border-color: var(--accent);
+  color: var(--ink);
+}
+
+.team-selector__swatches {
+  display: inline-flex;
+  gap: 3px;
+}
+.team-selector__label {
+  white-space: nowrap;
+}
+
+.team-selector__dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 300; /* above .topbar (100) and sticky table th (10) */
+  background: var(--bg-raised);
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1rem;
+  width: min(600px, 92vw);
+  max-height: 72vh;
+  overflow-y: auto;
+}
+
+.team-selector__dropdown-label {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--ink-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom: 0.75rem;
+}
+
+/* ---- Team picker popup (wider than KTC popup) ---- */
+.team-picker-popup {
+  max-width: 720px;
+}
+
+.team-picker__actions {
+  display: flex;
+  justify-content: center;
+  margin-top: 1.25rem;
+}
+
+/* ---- Team grid (shared by picker + selector) ---- */
+.team-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 0.6rem;
+  max-height: 56vh;
+  overflow-y: auto;
+}
+
+.team-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.6rem 0.4rem;
+  background: var(--bg-raised);
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--ink);
+  font-family: var(--font-body);
+  cursor: pointer;
+  transition: border-color 0.12s, background 0.12s;
+  text-align: center;
+}
+.team-tile:hover,
+.team-tile:focus-visible {
+  border-color: var(--accent);
+  background: var(--bg-hover);
+  outline: none;
+}
+.team-tile--active {
+  border-color: var(--accent);
+}
+
+.team-tile__code {
+  font-family: var(--font-mono);
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--accent);
+}
+
+.team-tile__name {
+  font-size: 0.72rem;
+  color: var(--ink-muted);
+  line-height: 1.2;
+  min-height: 1.8em; /* keep tiles aligned with 1–2 line names */
+}
+
+.team-tile__swatches {
+  display: inline-flex;
+  gap: 4px;
+  margin-top: auto;
 }
 
 /* ---- League Type Selector ---- */
@@ -842,8 +974,8 @@ a:hover { text-decoration: underline; }
   padding: 0.5rem;
 }
 .trade-verdict--fair      { color: var(--ink-muted); }
-.trade-verdict--slight    { color: var(--accent); }
-.trade-verdict--clear     { color: var(--accent); }
+.trade-verdict--slight    { color: var(--severity-mid); }
+.trade-verdict--clear     { color: var(--severity-mid); }
 .trade-verdict--landslide { color: var(--negative); }
 
 .calc-result {
@@ -1051,6 +1183,14 @@ a:hover { text-decoration: underline; }
 }
 
 /* ---- Utility ---- */
+.team-swatch {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  flex-shrink: 0;
+}
 .text-muted { color: var(--ink-muted); }
 .text-accent { color: var(--accent); }
 .mt-1 { margin-top: 0.5rem; }
@@ -1153,7 +1293,7 @@ a:hover { text-decoration: underline; }
 }
 .ktc-card:hover { border-color: var(--accent-dim); background: var(--bg-hover); }
 .ktc-card--keep  { border-color: var(--positive); }
-.ktc-card--trade { border-color: var(--accent); }
+.ktc-card--trade { border-color: var(--severity-mid); }
 .ktc-card--cut   { border-color: var(--negative); }
 
 .ktc-card__name {
@@ -1178,7 +1318,7 @@ a:hover { text-decoration: underline; }
   margin-top: 0.25rem;
 }
 .ktc-role--keep  { background: rgba(61,220,132,0.15); color: var(--positive); }
-.ktc-role--trade { background: rgba(232,165,37,0.15); color: var(--accent); }
+.ktc-role--trade { background: rgba(232,165,37,0.15); color: var(--severity-mid); }
 .ktc-role--cut   { background: rgba(255,82,82,0.15); color: var(--negative); }
 
 .ktc-actions {
@@ -1558,9 +1698,16 @@ a:hover { text-decoration: underline; }
 /* Tablet */
 @media (max-width: 768px) {
   .topbar { padding: 0.5rem 1rem; gap: 0.75rem; }
-  .topbar__nav { order: 3; width: 100%; }
+  .topbar__nav { order: 4; width: 100%; }
   .topbar__nav a { flex: 1; text-align: center; padding: 0.4rem 0.25rem; font-size: 0.75rem; }
-  .lt-selector { margin-left: 0; width: 100%; justify-content: center; }
+  .lt-selector { order: 3; margin-left: 0; width: 100%; justify-content: center; }
+  /* Team selector collapses to code + swatches and shares row 1 with the brand,
+     so it never pushes the nav (order 4) onto a 4th row on a 375px viewport. */
+  .team-selector { order: 2; margin-left: auto; }
+  .team-selector__label { display: none; }
+  .team-selector__toggle { padding: 0.2rem 0.45rem; }
+  .team-picker-popup { max-width: 100vw; }
+  .team-grid { max-height: 60vh; }
   .page { padding: 1rem; }
   .value-grid { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); }
   .ktc-cards { grid-template-columns: 1fr; }
