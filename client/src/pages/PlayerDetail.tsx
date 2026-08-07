@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useLeagueType } from '../context/LeagueTypeContext.js';
 import ValueChart from '../components/ValueChart.js';
+import Discussion from '../components/Discussion.js';
 import { formatLeagueLabel } from '@empire-fantasy/shared';
 
 interface ValueEntry {
@@ -262,6 +263,9 @@ export default function PlayerDetail() {
           </div>
         )}
       </div>
+
+      {/* Discussion */}
+      <Discussion assetId={data.asset_id} />
     </div>
   );
 }

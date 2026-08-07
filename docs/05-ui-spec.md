@@ -144,6 +144,68 @@ side by side; rank badges wrap under the name. Consistent with the existing
   `#${overallRank}` (ink, 2px default border). Both null → render neither. Picks render them
   in Dynasty (`positionalLabel` reads "PICK3").
 
+### Player Detail — Discussion
+
+A flat, anonymous, newest-first thread per asset, rendered as a section **below** the
+existing player-page content (after the recent-adjustments disclosure) on the same route —
+not a new route, not a tab. It lives in `client/src/components/Discussion.tsx` and owns its
+own fetching (`GET /api/comments/:assetId`); it is deliberately **not** part of the
+`AssetDetail` payload, which stays a single call that returns values/history/logs only.
+
+**Composer:**
+
+- Textarea, submit button, and a live character counter showing `n / 1000`.
+- The limit shadows the server's `MAX_COMMENT_LENGTH` (in `server/src/services/commentService.ts`) — the value must stay in lockstep with it; it is never retyped ad hoc in the component. (Ideally it would be imported from `@empire-fantasy/shared`; that shared export is not yet wired, so it is mirrored with a pointer comment.)
+- The counter turns `--negative` **past** the limit and the submit button disables. Submit is
+  also disabled while the body is empty-after-trim and while a request is in flight.
+- Above the textarea: **`Posting as Anonymous {Nickname} Fan`** (or `Anonymous Fan`), composed
+  client-side **for this preview only** — the stored `authorName` still comes from the server.
+- On success, prepend the returned comment to the list and clear the textarea — no refetch.
+- `429` renders "Daily comment limit reached. Come back tomorrow." (matches `KtcPopup`'s
+  capped copy). Other errors render inline; the typed body must **survive a failed submit**.
+
+**Identity mapping — the `'NONE'` → `null` rule:** `useTeamTheme()` has three states. Both
+"never asked" (`null`) and "Classic" (`'NONE'`) are **sent as `null` teamCode** on `POST`; a
+team code is sent as-is. The server has no `'NONE'` team and would reject it with a `400`.
+
+**List:**
+
+- Rows render **newest first**. Each row: author name, relative
+  timestamp, body, and a `✕`/`Sure?` delete control when `isMine`.
+- Author names are styled with `--severity-mid` or `--ink`, **never `--accent`** (which is the
+  *reader's* team color and would read as if every commenter backed the reader's team).
+  Optionally each name is tinted with the commenter's own team color from `teamThemes.ts`,
+  run through the theme's `contrast >= 4.5:1` rule against the current `--bg` and falling
+  back to `--ink` on failure — a dark color on a dark background is unreadable regardless.
+- Empty state: "No discussion yet." in `--ink-muted`.
+- Pagination: 50 per page, a "Load more" button appends the next `offset` while
+  `list.length < total`. No infinite scroll.
+
+**Rendering the body — the security-relevant part:**
+
+- The body is a **React text node**: `<p className="comment__body">{c.body}</p>`.
+- **Never `dangerouslySetInnerHTML`.** No markdown, no link auto-detection, no `<br>`
+  substitution via HTML — escaping happens here by rendering as text; the server stores the
+  body verbatim (see `docs/01-architecture.md`), so any HTML-special characters in a comment
+  are shown literally, never executed.
+- Line breaks are preserved with CSS (`white-space: pre-wrap`), not by splitting/injecting
+  elements.
+- `.comment__body` also sets `overflow-wrap: anywhere` so a 1000-character string with no
+  spaces can't blow out the page width.
+
+**Delete:** confirm inline (the control becomes "Sure?"), then `DELETE`, then remove from
+local state. No `window.confirm`.
+
+**Responsive (< 768px):** the composer goes full width; the author line wraps above the
+timestamp rather than sharing a row.
+
+**CSS classes:** `.discussion`, `.comment`, `.comment__author`, `.comment__meta`,
+`.comment__body`, `.comment-composer`, `.comment-composer__count` (plus supporting
+`.comment__timestamp`, `.comment__delete`, `.comment__empty`, `.comment-composer__input`,
+`.comment-composer__submit`, `.comment-composer__error`, `.discussion__list`,
+`.discussion__pagination`). Reuses existing tokens — no new colors, no new fonts, no icon
+library (delete is the `✕` character, matching `.ktc-popup__close`).
+
 ### 3. Keep / Trade / Cut (`/ktc`)
 
 - **Per-session popup**: on every new browser/tab session (gate on `sessionStorage['ef_ktc_seen']`, not localStorage), a modal overlay appears over whatever page the user landed on. Same KTC card UI as the full page. Dismissible (✕ or Skip); after voting or skipping, sets sessionStorage flag and won't re-appear until the tab/browser is closed and reopened. The KTC tab remains for voluntary additional votes.

@@ -1163,6 +1163,162 @@ a:hover { text-decoration: underline; }
   font-size: 0.85rem;
 }
 
+/* ---- Discussion ---- */
+.discussion {
+  margin-top: 2rem;
+}
+
+.discussion__list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+.comment {
+  background: var(--bg-raised);
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.75rem 1rem;
+}
+
+.comment__meta {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  margin-bottom: 0.4rem;
+}
+
+.comment__author {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--severity-mid); /* not --accent: that would read as the reader's team */
+}
+
+.comment__timestamp {
+  font-size: 0.7rem;
+  color: var(--ink-muted);
+}
+
+.comment__delete {
+  margin-left: auto;
+  background: none;
+  border: none;
+  color: var(--ink-muted);
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  cursor: pointer;
+  padding: 0 0.25rem;
+  line-height: 1;
+}
+.comment__delete:hover { color: var(--negative); }
+
+.comment__body {
+  font-size: 0.85rem;
+  color: var(--ink);
+  white-space: pre-wrap;      /* preserve line breaks without injecting elements */
+  overflow-wrap: anywhere;     /* a 1000-char run with no spaces can't blow the layout */
+}
+
+.comment__empty {
+  color: var(--ink-muted);
+  font-size: 0.85rem;
+  padding: 1rem 0;
+}
+
+.discussion__pagination {
+  margin-top: 1rem;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.4rem;
+}
+
+/* ---- Comment composer ---- */
+.comment-composer {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+  background: var(--bg-raised);
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.75rem 1rem;
+}
+
+.comment-composer__row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.75rem;
+}
+
+.comment-composer__identity {
+  font-size: 0.7rem;
+  color: var(--ink-muted);
+}
+
+.comment-composer__count {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--ink-muted);
+  white-space: nowrap;
+}
+.comment-composer__count--negative { color: var(--negative); }
+
+.comment-composer__input {
+  width: 100%;
+  min-height: 4.5rem;
+  background: var(--bg);
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--ink);
+  font-family: var(--font-mono); /* textareas ignore body font by default — force it */
+  font-size: 0.85rem;
+  padding: 0.5rem 0.65rem;
+  resize: vertical;
+  outline: none;
+}
+.comment-composer__input::placeholder { color: var(--ink-muted); }
+.comment-composer__input:focus { border-color: var(--accent); }
+
+.comment-composer__actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.comment-composer__submit {
+  background: var(--accent);
+  color: var(--bg);
+  border: 2px solid var(--accent);
+  border-radius: var(--radius);
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 0.4rem 1.15rem;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.comment-composer__submit:hover:not(:disabled) { background: var(--accent-dim); }
+.comment-composer__submit:disabled { opacity: 0.45; cursor: default; }
+.comment-composer__submit--ghost {
+  background: transparent;
+  color: var(--ink-muted);
+  border-color: var(--border);
+}
+.comment-composer__submit--ghost:hover:not(:disabled) {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: transparent;
+}
+
+.comment-composer__error {
+  color: var(--negative);
+  font-size: 0.8rem;
+}
+
 /* ---- Empty / Error States ---- */
 .empty-state {
   text-align: center;
@@ -1736,6 +1892,12 @@ a:hover { text-decoration: underline; }
   .filters { gap: 0.4rem; }
   .filter-tabs { overflow-x: auto; flex-shrink: 0; }
   .search-input { min-width: 0; flex: 1; }
+  /* Discussion: composer goes full width; author line wraps above the timestamp */
+  .comment-composer { width: 100%; }
+  .comment__meta { flex-wrap: wrap; }
+  .comment__author { flex-basis: 100%; }
+  .comment__timestamp { order: 2; }
+  .comment__delete { order: 3; }
 }
 
 /* Phone */

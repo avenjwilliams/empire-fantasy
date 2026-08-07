@@ -6,11 +6,18 @@
 // shipping 33 hand-tuned `[data-team]` blocks in theme.css (which would let the
 // palette drift between the two places and duplicate it).
 //
+// The roster of teams (code, city, nickname) lives in ONE place —
+// shared/src/constants.ts as `NFL_TEAMS`. This file imports it and adds only
+// the presentation colors keyed by code. The `NONE` / Classic entry stays
+// client-side because it isn't an NFL team.
+//
 // Only the ACCENT group (--accent, --accent-dim, --accent-alt) and the SURFACE
 // group (--bg, --bg-raised, --bg-hover, --border) vary per team. The SEMANTIC
 // group (--ink, --ink-muted, --positive, --negative) and --severity-mid are
 // global and must NEVER be themed — see docs/05-ui-spec.md "Coloring".
 // ============================================================================
+
+import { NFL_TEAMS } from '@empire-fantasy/shared';
 
 export interface TeamTheme {
   /** Two-letter franchise code, matching the DB convention (GB, KC, LV, SF, TB,
@@ -84,47 +91,62 @@ function lighten(hex: string, n: number): string {
 }
 
 // ----------------------------------------------------------------------------
-// The fixed team list. Do not derive from the DB/API: the players.team column
-// currently holds only 29 distinct codes (CLE/LAC/TEN have no rostered players),
-// so a DB-derived list would silently ship a 29-team picker. Franchise hexes are
-// official, best-effort; a wrong shade is a one-line cosmetic fix. Each entry's
-// accent comment marks which slot the RULES pick (a chain, not taste) — e.g.
-// Baltimore accents its secondary because the dark primary cannot pass 4.5:1.
+// The fixed team list. The survey of teams (code, city, nickname) lives in
+// shared/src/constants.ts as `NFL_TEAMS` — this is now the single home for the
+// roster. Here we keep ONLY the presentation colors, keyed by the exact code
+// NFL_TEAMS ships. Deriving the teammates from NFL_TEAMS also guards the
+// 29-vs-32 pitfall (players.team holds only 29 distinct codes; CLE/LAC/TEN have
+// no rostered players) automacity — shared owns all 32.
+//
+// Franchise hexes are official, best-effort; a wrong shade is a one-line
+// cosmetic fix. Each entry's accent comment marks which slot the RULE picks
+// (a chain, not taste) — e.g. Baltimore accents its secondary because the dark
+// primary cannot pass 4.5:1.
+//
+// NONE / Classic is NOT an NFL team, so it stays here alongside the color map.
 // ----------------------------------------------------------------------------
+export const TEAM_COLORS: Record<string, { primary: string; secondary: string; tertiary: string }> = {
+  ARI: { primary: '#97233f', secondary: '#000000', tertiary: '#ffb612' }, // accent: tertiary (gold)
+  ATL: { primary: '#a71930', secondary: '#000000', tertiary: '#a5acaf' }, // accent: tertiary (silver)
+  BAL: { primary: '#241773', secondary: '#9e7c0c', tertiary: '#000000' }, // accent: secondary (gold)
+  BUF: { primary: '#00338d', secondary: '#c60c30', tertiary: '#b1b3b4' }, // accent: tertiary (nickel)
+  CAR: { primary: '#0085ca', secondary: '#000000', tertiary: '#a5acaf' }, // accent: primary (blue)
+  CHI: { primary: '#0b162a', secondary: '#c83803', tertiary: '#ffffff' }, // accent: tertiary (white)
+  CIN: { primary: '#fb4f19', secondary: '#000000', tertiary: '#ffffff' }, // accent: primary (orange)
+  CLE: { primary: '#311d00', secondary: '#ff3c00', tertiary: '#ffffff' }, // accent: tertiary (white)
+  DAL: { primary: '#002244', secondary: '#003594', tertiary: '#869397' }, // accent: tertiary (silver)
+  DEN: { primary: '#fb4f14', secondary: '#002244', tertiary: '#ffffff' }, // accent: primary (orange)
+  DET: { primary: '#0076b6', secondary: '#b0b0b0', tertiary: '#000000' }, // accent: tertiary (silver)
+  GB: { primary: '#203731', secondary: '#ffb612', tertiary: '#ffffff' }, // accent: secondary (gold)
+  HOU: { primary: '#03202f', secondary: '#a71930', tertiary: '#ffffff' }, // accent: tertiary (white)
+  IND: { primary: '#00327b', secondary: '#ffffff', tertiary: '#737373' }, // accent: secondary (white)
+  JAX: { primary: '#006778', secondary: '#000000', tertiary: '#d8a936' }, // accent: tertiary (gold)
+  KC: { primary: '#e31837', secondary: '#ffc517', tertiary: '#101820' }, // accent: secondary (gold)
+  LAC: { primary: '#0080c6', secondary: '#ffc20e', tertiary: '#002a5e' }, // accent: secondary (gold)
+  LAR: { primary: '#003594', secondary: '#ffd200', tertiary: '#ffffff' }, // accent: secondary (gold)
+  LV: { primary: '#000000', secondary: '#a5acac', tertiary: '#cf8b2c' }, // accent: secondary (silver)
+  MIA: { primary: '#008e97', secondary: '#fa4c02', tertiary: '#005778' }, // accent: lightened primary (aqua)
+  MIN: { primary: '#4f2e84', secondary: '#ffc62f', tertiary: '#b0b3b8' }, // accent: secondary (gold)
+  NE: { primary: '#002e51', secondary: '#c60c30', tertiary: '#0095d9' }, // accent: lightened primary (navy)
+  NO: { primary: '#101820', secondary: '#d3bc8d', tertiary: '#ffffff' }, // accent: secondary (gold)
+  NYG: { primary: '#001e5e', secondary: '#c8102e', tertiary: '#a66a21' }, // accent: lightened primary (navy)
+  NYJ: { primary: '#125740', secondary: '#5b8a3e', tertiary: '#0f0f0f' }, // accent: lightened primary (green)
+  PHI: { primary: '#004c54', secondary: '#a5acaf', tertiary: '#000000' }, // accent: secondary (silver)
+  PIT: { primary: '#000000', secondary: '#ffb81c', tertiary: '#a5abab' }, // accent: secondary (gold)
+  SEA: { primary: '#0c2340', secondary: '#69be28', tertiary: '#acabab' }, // accent: secondary (green)
+  SF: { primary: '#aa0000', secondary: '#b3995d', tertiary: '#ffe400' }, // accent: tertiary (gold)
+  TB: { primary: '#d50a13', secondary: '#161736', tertiary: '#a5a5a5' }, // accent: tertiary (silver)
+  TEN: { primary: '#0b1b2b', secondary: '#4b92db', tertiary: '#ffffff' }, // accent: tertiary (white)
+  WAS: { primary: '#5a1414', secondary: '#9e8c44', tertiary: '#ffd700' }, // accent: tertiary (gold)
+};
+
 export const TEAMS: TeamTheme[] = [
   { code: 'NONE', name: 'Classic', primary: '#e8a525', secondary: '#b07c15', tertiary: '#0a0e14' },
-  { code: 'ARI', name: 'Arizona Cardinals', primary: '#97233f', secondary: '#000000', tertiary: '#ffb612' }, // accent: tertiary (gold)
-  { code: 'ATL', name: 'Atlanta Falcons', primary: '#a71930', secondary: '#000000', tertiary: '#a5acaf' }, // accent: tertiary (silver)
-  { code: 'BAL', name: 'Baltimore Ravens', primary: '#241773', secondary: '#9e7c0c', tertiary: '#000000' }, // accent: secondary (gold)
-  { code: 'BUF', name: 'Buffalo Bills', primary: '#00338d', secondary: '#c60c30', tertiary: '#b1b3b4' }, // accent: tertiary (nickel)
-  { code: 'CAR', name: 'Carolina Panthers', primary: '#0085ca', secondary: '#000000', tertiary: '#a5acaf' }, // accent: primary (blue)
-  { code: 'CHI', name: 'Chicago Bears', primary: '#0b162a', secondary: '#c83803', tertiary: '#ffffff' }, // accent: tertiary (white)
-  { code: 'CIN', name: 'Cincinnati Bengals', primary: '#fb4f19', secondary: '#000000', tertiary: '#ffffff' }, // accent: primary (orange)
-  { code: 'CLE', name: 'Cleveland Browns', primary: '#311d00', secondary: '#ff3c00', tertiary: '#ffffff' }, // accent: tertiary (white)
-  { code: 'DAL', name: 'Dallas Cowboys', primary: '#002244', secondary: '#003594', tertiary: '#869397' }, // accent: tertiary (silver)
-  { code: 'DEN', name: 'Denver Broncos', primary: '#fb4f14', secondary: '#002244', tertiary: '#ffffff' }, // accent: primary (orange)
-  { code: 'DET', name: 'Detroit Lions', primary: '#0076b6', secondary: '#b0b0b0', tertiary: '#000000' }, // accent: tertiary (silver)
-  { code: 'GB', name: 'Green Bay Packers', primary: '#203731', secondary: '#ffb612', tertiary: '#ffffff' }, // accent: secondary (gold)
-  { code: 'HOU', name: 'Houston Texans', primary: '#03202f', secondary: '#a71930', tertiary: '#ffffff' }, // accent: tertiary (white)
-  { code: 'IND', name: 'Indianapolis Colts', primary: '#00327b', secondary: '#ffffff', tertiary: '#737373' }, // accent: secondary (white)
-  { code: 'JAX', name: 'Jacksonville Jaguars', primary: '#006778', secondary: '#000000', tertiary: '#d8a936' }, // accent: tertiary (gold)
-  { code: 'KC', name: 'Kansas City Chiefs', primary: '#e31837', secondary: '#ffc517', tertiary: '#101820' }, // accent: secondary (gold)
-  { code: 'LAC', name: 'Los Angeles Chargers', primary: '#0080c6', secondary: '#ffc20e', tertiary: '#002a5e' }, // accent: secondary (gold)
-  { code: 'LAR', name: 'Los Angeles Rams', primary: '#003594', secondary: '#ffd200', tertiary: '#ffffff' }, // accent: secondary (gold)
-  { code: 'LV', name: 'Las Vegas Raiders', primary: '#000000', secondary: '#a5acac', tertiary: '#cf8b2c' }, // accent: secondary (silver)
-  { code: 'MIA', name: 'Miami Dolphins', primary: '#008e97', secondary: '#fa4c02', tertiary: '#005778' }, // accent: lightened primary (aqua)
-  { code: 'MIN', name: 'Minnesota Vikings', primary: '#4f2e84', secondary: '#ffc62f', tertiary: '#b0b3b8' }, // accent: secondary (gold)
-  { code: 'NE', name: 'New England Patriots', primary: '#002e51', secondary: '#c60c30', tertiary: '#0095d9' }, // accent: lightened primary (navy)
-  { code: 'NO', name: 'New Orleans Saints', primary: '#101820', secondary: '#d3bc8d', tertiary: '#ffffff' }, // accent: secondary (gold)
-  { code: 'NYG', name: 'New York Giants', primary: '#001e5e', secondary: '#c8102e', tertiary: '#a66a21' }, // accent: lightened primary (navy)
-  { code: 'NYJ', name: 'New York Jets', primary: '#125740', secondary: '#5b8a3e', tertiary: '#0f0f0f' }, // accent: lightened primary (green)
-  { code: 'PHI', name: 'Philadelphia Eagles', primary: '#004c54', secondary: '#a5acaf', tertiary: '#000000' }, // accent: secondary (silver)
-  { code: 'PIT', name: 'Pittsburgh Steelers', primary: '#000000', secondary: '#ffb81c', tertiary: '#a5abab' }, // accent: secondary (gold)
-  { code: 'SEA', name: 'Seattle Seahawks', primary: '#0c2340', secondary: '#69be28', tertiary: '#acabab' }, // accent: secondary (green)
-  { code: 'SF', name: 'San Francisco 49ers', primary: '#aa0000', secondary: '#b3995d', tertiary: '#ffe400' }, // accent: tertiary (gold)
-  { code: 'TB', name: 'Tampa Bay Buccaneers', primary: '#d50a13', secondary: '#161736', tertiary: '#a5a5a5' }, // accent: tertiary (silver)
-  { code: 'TEN', name: 'Tennessee Titans', primary: '#0b1b2b', secondary: '#4b92db', tertiary: '#ffffff' }, // accent: tertiary (white)
-  { code: 'WAS', name: 'Washington Commanders', primary: '#5a1414', secondary: '#9e8c44', tertiary: '#ffd700' }, // accent: tertiary (gold)
+  ...NFL_TEAMS.map(t => ({
+    code: t.code,
+    name: `${t.city} ${t.nickname}`,
+    ...TEAM_COLORS[t.code],
+  })),
 ];
 
 // ----------------------------------------------------------------------------
