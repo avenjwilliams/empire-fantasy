@@ -69,7 +69,7 @@ export function generatePrompt(
       p.asset_a, p.asset_b, p.asset_c
     FROM ktc_prompts p
     JOIN league_types lt ON lt.id = p.league_type_id
-    WHERE p.session_id = ? AND p.answered_at IS NULL
+    WHERE p.session_id = ? AND p.answered_at IS NULL AND p.skipped_at IS NULL
   `;
   const queryParams: (string | number)[] = [sessionId];
 
