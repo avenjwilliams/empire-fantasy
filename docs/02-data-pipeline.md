@@ -92,14 +92,14 @@ Run manually or via cron each Tuesday during the season:
 
 Small cron (or on-demand script) writes current `asset_values` into `value_history` once per day. This powers value-over-time charts regardless of how many adjustments happened that day.
 
-## Boom/Bust Generation (scripts/generate-boom-bust.ts)
+## Volatility Generation (scripts/generate-volatility.ts)
 
-Run `npm run boom-bust:generate` to populate `boom_pct` and `bust_pct` on the `players` table.
+Run `npm run volatility:generate` to populate `volatility_pct` on the `players` table.
 
-- **What it does**: For every player row, generates independent random integers for `boom_pct` and `bust_pct` in the range **5–65** (not the full 0–100 — values near the extremes are implausible placeholders). The RNG is seeded deterministically from the player's `sleeper_id`, so the same player always gets the same placeholder numbers across reseeds.
+- **What it does**: For every player row, generates a single random integer for `volatility_pct` in the range **5–95** (not the full 0–100 — values near the extremes are implausible placeholders). The RNG is seeded deterministically from the player's `sleeper_id` plus the literal `'|volatility'`, so the same player always gets the same placeholder number across reseeds.
 - **Idempotent by default**: Only fills rows where the column is currently `NULL`. Re-running without flags reports 0 filled and changes no existing numbers.
 - **`--force` flag**: Regenerates all rows, overwriting existing values.
 - **Not part of `npm run seed`**: This is a separate manual step. The seed pipeline does not call it automatically.
 - **Single transaction**: All writes are wrapped in one DB transaction.
 - **Log output**: One-line summary: how many players filled, how many skipped (already had values).
-- **Placeholders only**: The current numbers are random placeholders. Real computation will derive ratings from `weekly_stats` against positional baselines (see roadmap).
+- **Placeholders only**: The current numbers are random placeholders. Real computation will derive volatility from `weekly_stats` against positional baselines (see roadmap).

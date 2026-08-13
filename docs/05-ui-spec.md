@@ -44,24 +44,24 @@ Persistent top bar: `EMPIRE FANTASY` wordmark left; tabs: **Calculator · Rankin
 - Expandable **"Show the math"** panel: per-asset breakdown (linear value → curved trueValue → slot weight → weighted contribution), **plus new per-side breakdown showing rawSum, depthPenalty, and adjustment**, and formula caption updated from "linear depth-weighted sum" to describe the credit framing. Toggled via dashed-border button below the verdict.
 - Evaluation auto-runs on every change (debounced); no submit button.
 
-### Trade Calculator — Boom / Bust Profile Panel
+### Trade Calculator — Volatility Profile Panel
 
 Positioned inside `.calc-result`, after `.calc-result__details` and before the "Players to Even Trade" suggestions panel. It describes the trade as constructed, so it belongs with the verdict, above the prescriptive suggestions.
 
 **Layout — side-by-side comparison with delta line:**
 
 ```
-              BOOM      BUST
-  TEAM 1       41%       28%
-  TEAM 2       53%       19%
-  ─────────────────────────────
-  Team 2 gets +12 boom, −9 bust
+              VOL
+  TEAM 1       41%
+  TEAM 2       53%
+  ─────────────────
+  Team 2 gets +12 volatility
 ```
 
-- Team 1 and Team 2 rows, each with a boom and a bust figure, aligned in columns so they read as a direct comparison.
-- Below them, a delta line. Compute `boomDelta = team2.boom − team1.boom` and the same for bust, and phrase it in terms of the side receiving more boom: "Team 2 gets +12 boom, −9 bust." Use the existing `.delta--pos` / `.delta--neg` color tokens on the signed numbers.
-- Render the delta line only when **both** sides have a non-null value for that metric. If one side is unrated, there's no comparison to draw — show the available side's numbers and omit the delta rather than comparing against nothing.
-- Boom figures in `var(--positive)`, bust in `var(--negative)`, monospace, matching the density of the surrounding result panel. No new colors.
+- Team 1 and Team 2 rows, each with a single volatility figure, aligned in columns so they read as a direct comparison.
+- Below them, a delta line. Compute `volDelta = team2.volatility − team1.volatility` and phrase it in terms of the side receiving more: "Team 2 gets +12 volatility." Render it with **no `.delta--pos` / `.delta--neg` class** — a signed volatility difference has no good/bad direction. This is a deliberate departure from the old boom/bust panel, not an oversight: those tokens mean value direction everywhere else, and volatility is directionless.
+- Render the delta line only when **both** sides have a non-null value. If one side is unrated, there's no comparison to draw — show the available side's number and omit the delta rather than comparing against nothing.
+- Figures in default ink, monospace, matching the density of the surrounding result panel. No color coding — volatility is neutral, not good/bad. No new colors.
 - Null renders as a muted `—`.
 
 **Coverage note (required).** When a side has `unratedCount > 0`, render a small muted line beneath that side's row: "excludes 2 unrated" (or "excludes 1 unrated"). This is not optional polish — in Dynasty, a package of one player plus three picks would otherwise show a confident-looking average that describes a single asset. The user needs to see the average's coverage.
@@ -74,69 +74,64 @@ Positioned inside `.calc-result`, after `.calc-result__details` and before the "
 
 **Responsive:** At mobile width, the panel stacks rather than squashes, consistent with how `.calc-result__details` already adapts (see `@media (max-width: 768px)` block in `theme.css`).
 
-**CSS classes:** `.boom-bust-compare`, `.boom-bust-compare__header`, `.boom-bust-compare__label`, `.boom-bust-compare__col`, `.boom-bust-compare__col--boom`, `.boom-bust-compare__col--bust`, `.boom-bust-compare__row`, `.boom-bust-compare__side`, `.boom-bust-compare__val`, `.boom-bust-compare__val--boom`, `.boom-bust-compare__val--bust`, `.boom-bust-compare__coverage`, `.boom-bust-compare__delta`, `.boom-bust-compare__delta-item`.
-
-**Important:** Do not reuse the `.boom-bust` track markup from PlayerDetail.tsx — that block belongs to the profile page and the result panel is already tall. Do not modify it.
+**CSS classes:** `.volatility-compare`, `.volatility-compare__header`, `.volatility-compare__label`, `.volatility-compare__col`, `.volatility-compare__row`, `.volatility-compare__side`, `.volatility-compare__val`, `.volatility-compare__coverage`, `.volatility-compare__delta`, `.volatility-compare__delta-item`.
 
 ### 2. Rankings (`/rankings`)
 
-- Table for current league type: overall rank (#), positional rank (Pos), name, position (Pos badge), team, age, **Boom**, **Bust**, value.
+- Table for current league type: overall rank (#), positional rank (Pos), name, position (Pos badge), team, age, **Volatility (VOL)**, value.
 - Controls: position filter tabs (ALL · QB · RB · WR · TE · PICKS when DYN), text search.
-- **Sortable columns**: Value, Boom, Bust, Age. Non-sortable: #, Pos, Name, Team.
+- **Sortable columns**: Value, Volatility, Age. Non-sortable: #, Pos, Name, Team.
 - **Default state**: unsorted — renders in the API's natural value DESC order (byte-identical to no-sort behavior).
 - **Three-state sort cycle**: clicking a sortable header cycles descending → ascending → default (unsorted). The third click returns to the canonical view.
 - **Single-column sort**: only one column sorts at a time; clicking a new header replaces the previous sort.
 - **Sort reset**: sort state resets to default when the position tab or league type changes. It does **not** reset on search input — filtering and sorting compose.
 - **Null handling**: nulls (picks, unrated players) sort to the bottom in **both** directions. Not treated as 0 or -Infinity.
 - **Tie-breaking**: equal values break by overallRank ascending for stable, meaningful ordering.
-- **Rank columns do not renumber on sort**: overallRank (#) and positionalLabel (Pos) are identity computed server-side from value order. They travel with their rows. After sorting by Boom, the top row might read #47 / WR12 — this is correct. Do not recompute rank client-side.
+- **Rank columns do not renumber on sort**: overallRank (#) and positionalLabel (Pos) are identity computed server-side from value order. They travel with their rows. After sorting by Volatility, the top row might read #47 / WR12 — this is correct. Do not recompute rank client-side.
 - **Header affordance**: sortable headers are `<button>` elements with pointer cursor, monospace sort indicator (▼ desc, ▲ asc, none for default), and `aria-sort` attribute. Keyboard accessible (Enter/Space).
 - **Sticky header**: thead is `position: sticky; top: 0; z-index: 10` — header markup must not break this.
-- Row click → Player detail (`/player/:assetId`): header shows pos-badge, name/team/age/status plus two rank badges (POS, e.g. "RB2", and OVR, e.g. "#4") when ranks exist; a hero row with the current value + label and, for players, boom/bust rings (picks get the value only, no rings); the value-across-all-24-formats grid behind a "Show all 24 formats" disclosure (closed by default); the value-over-time chart with a 30D / 90D / ALL range toggle; and the recent adjustment log behind a "Recent adjustments (N)" disclosure (closed by default).
+- Row click → Player detail (`/player/:assetId`): header shows pos-badge, name/team/age/status plus two rank badges (POS, e.g. "RB2", and OVR, e.g. "#4") when ranks exist; a hero row with the current value + label and, for players, a single volatility ring (picks get the value only, no ring); the value-across-all-24-formats grid behind a "Show all 24 formats" disclosure (closed by default); the value-over-time chart with a 30D / 90D / ALL range toggle; and the recent adjustment log behind a "Recent adjustments (N)" disclosure (closed by default).
 - Virtualize or paginate at 100 rows.
 
-**Mobile (< 768px)**: Boom and Bust columns hidden (`display: none` on both th/td). Remaining columns still sortable. Table horizontally scrolls for rank/name/value.
+**Mobile (< 768px)**: the Volatility column is hidden (`display: none` on both th/td). Remaining columns still sortable. Table horizontally scrolls for rank/name/value.
 
-### Player Detail — Boom / Bust Section
+### Player Detail — Volatility Ring
 
-Two independent donut-gauge rings sit in the player detail **hero row**, to the right of the
-value, above the "Show all 24 formats" disclosure. Boom uses `var(--positive)`, bust uses
-`var(--negative)`.
+A single donut-gauge ring sits in the player detail **hero row**, to the right of the
+value, above the "Show all 24 formats" disclosure. It renders in `var(--accent)`.
 
-**Visual: two side-by-side SVG rings**
+**Visual: one SVG ring**
 
 ```
-  [  ████░░░░░░  38% ]   [  ██░░░░░░░░  21% ]
-        BOOM                  BUST
+  [  ████░░░░░░  38% ]
+         VOL
 ```
 
 - Ring spec (hard numbers, do not derive): `viewBox="0 0 86 86"`, `cx/cy = 43`, `r = 34`,
   `stroke-width = 9`, circumference `213.6`. Track circle is full `var(--bg-hover)`. Value arc
   uses `stroke-dasharray = (pct/100)*213.6 , 213.6 - (pct/100)*213.6` with
   `transform="rotate(-90 43 43)"` so the arc opens from 12 o'clock.
-- Centered inside each ring: the percentage (~20px) in the arc's color (boom
-  `--positive`, bust `--negative`), and below it the label `BOOM` / `BUST` (~10px,
-  `--ink-muted`).
-- `boomPct` and `bustPct` are generated independently and can sum to more than 100. They are
-  two separate rings, **not** two halves of one dial — do not imply a "steady" remainder or a
-  shared 100% baseline.
+- Centered inside the ring: the percentage (~20px) in the arc's color (`var(--accent)`), and
+  below it the label `VOL` (~10px, `--ink-muted`).
+- The ring color is **`var(--accent)`, NOT `--positive` or `--negative`**. High volatility is
+  not good or bad, and those tokens encode value direction everywhere else in the app. This
+  is a deliberate exclusion, not an oversight.
 - Retro terminal theme only. Square corners, monospace numbers, 2px track strokes, no
-  gradients, no shadows, no load animation on the rings.
+  gradients, no shadows, no load animation on the ring.
 - CSS: `.player-hero`, `.player-hero__value`, `.player-hero__label`, `.player-hero__rings`,
   `.ring`, `.ring__pct`, `.ring__label`.
 
 **Required states:**
 
-1. **Player with ratings** → both rings draw proportional arcs, numbers match DB.
-2. **Player with null ratings** (`boom_pct` or `bust_pct` null) → that ring shows an empty
-   arc (track only) with a muted `—` where the percentage goes. Do **not** hide the ring and
-   do **not** draw it as 0%.
+1. **Player with rating** → the ring draws a proportional arc, number matches DB.
+2. **Player with null rating** (`volatility_pct` null) → empty arc (track only) with a muted
+   `—` where the percentage goes. Do **not** hide the ring and do **not** draw it as 0%.
 3. **Pick** (`data.kind === 'pick'`) → the ring side of the hero is omitted entirely; the
-   value sits alone. Picks have no boom/bust and an empty ring would be noise. (Rank badges
+   value sits alone. Picks have no volatility and an empty ring would be noise. (Rank badges
    in the header do render for picks in Dynasty — `positionalLabel` reads e.g. "PICK3".)
 
-**Responsive (< 768px):** hero stacks value above the rings; rings shrink (72px) but stay
-side by side; rank badges wrap under the name. Consistent with the existing
+**Responsive (< 768px):** hero stacks value above the ring; the ring shrinks (72px) but stays
+put; rank badges wrap under the name. Consistent with the existing
 `@media (max-width: 768px)` block.
 
 - **Header rank badges**: two badges replace the bare value in the `.detail-header` right
@@ -219,7 +214,7 @@ library (delete is the `✕` character, matching `.ktc-popup__close`).
 
 ## Components inventory
 
-`LeagueTypeSelector`, `AssetSearch`, `AssetChip`, `TradeScale`, `VerdictBanner`, `RankingsTable`, `ValueChart` (Recharts line), `KtcCard`, `LogTable`, `ReasonChip`, `SuggestionsPanel`, `BoomBust`, `TeamSelector`, `TeamPicker`, `TeamGrid`.
+`LeagueTypeSelector`, `AssetSearch`, `AssetChip`, `TradeScale`, `VerdictBanner`, `RankingsTable`, `ValueChart` (Recharts line), `KtcCard`, `LogTable`, `ReasonChip`, `SuggestionsPanel`, `VolatilityRing`, `TeamSelector`, `TeamPicker`, `TeamGrid`.
 
 ## Team color themes
 
@@ -262,7 +257,9 @@ Only the ACCENT and SURFACE groups vary:
 
 ### The fixed `--severity-mid` (amber) token
 
-`--positive` (green) and `--negative` (red) are **not decoration** — they encode meaning in value deltas, boom/bust bars, trade-scale zones, KTC card borders, KTC role chips, and the trade verdict ramp. They never change.
+`--positive` (green) and `--negative` (red) are **not decoration** — they encode meaning in value deltas, trade-scale zones, KTC card borders, KTC role chips, and the trade verdict ramp. They never change.
+
+**Volatility is deliberately excluded from that pair.** High volatility is not good or bad, so nothing volatility-related uses `--positive` / `--negative`: the rankings VOL column renders in default ink, the player-detail ring uses `var(--accent)`, and the trade volatility panel's signed delta line carries no `delta--pos` / `delta--neg` class.
 
 That is necessary but not sufficient: two ramps previously used `--accent` as the *middle* step between green and red (`.trade-verdict--slight`/`--clear` and `.ktc-role--trade`, plus the `ktc-card--trade` border). Both are ordered severity scales, and for a team whose primary is red or green, an `--accent` in the middle collapses the ramp to two steps (`Slight`/`Clear` blur together with `Landslide`, or `TRADE`/`KEEP` blur together). Roughly a third of the league has a red or green primary, so this is the common case.
 

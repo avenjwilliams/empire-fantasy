@@ -52,8 +52,7 @@ CREATE TABLE players (
   team TEXT,                      -- NFL abbreviation, NULL if free agent
   age REAL,
   status TEXT DEFAULT 'active',   -- active | injured | inactive
-  boom_pct INTEGER CHECK (boom_pct IS NULL OR boom_pct BETWEEN 0 AND 100),
-  bust_pct INTEGER CHECK (bust_pct IS NULL OR bust_pct BETWEEN 0 AND 100),
+  volatility_pct INTEGER CHECK (volatility_pct IS NULL OR volatility_pct BETWEEN 0 AND 100),
   created_at TEXT DEFAULT (datetime('now')),
   updated_at TEXT
 );
@@ -163,9 +162,9 @@ Indexes: `adjustment_log(asset_id, league_type_id)`, `adjustment_log(created_at)
 
 ```
 GET  /api/league-types
-GET  /api/rankings?leagueType=DYN_SF_PPR_TEP&position=RB   # sorted by value DESC, with overall + positional rank + boom_pct/bust_pct (players only, null for picks)
+GET  /api/rankings?leagueType=DYN_SF_PPR_TEP&position=RB   # sorted by value DESC, with overall + positional rank + volatility_pct (players only, null for picks)
 GET  /api/assets/search?q=jeff&leagueType=...              # calculator search (includes picks if DYN)
-GET  /api/assets/:id?leagueType=...                        # detail + history + recent logs + boom_pct/bust_pct + overallRank/positionalRank/positionalLabel (rank fields null without leagueType)
+GET  /api/assets/:id?leagueType=...                        # detail + history + recent logs + volatility_pct + overallRank/positionalRank/positionalLabel (rank fields null without leagueType)
 POST /api/trade/evaluate        { leagueType, team1: [assetIds], team2: [assetIds] }
 GET  /api/ktc/prompt[?leagueType=CODE]                     # creates/returns prompt for session (sets session cookie)
 POST /api/ktc/vote              { promptId, keep, trade, cut }
@@ -213,20 +212,19 @@ Trade evaluation is **stateless** (no DB write) — it reads current values and 
       "resultingVerdict": "Slight edge"
     }
   ],
-  "boomBust": {
-    "team1": { "boom": 40, "bust": 25, "ratedCount": 1, "unratedCount": 0 },
-    "team2": { "boom": 57, "bust": 17, "ratedCount": 2, "unratedCount": 0 }
+  "volatility": {
+    "team1": { "volatility": 40, "ratedCount": 1, "unratedCount": 0 },
+    "team2": { "volatility": 57, "ratedCount": 2, "unratedCount": 0 }
   }
 }
 ```
 
-- `boomBust` is always present with both sides. Each side has:
-  - `boom`: value-weighted mean boom % (integer 0–100) or `null` if no rated assets
-  - `bust`: value-weighted mean bust % (integer 0–100) or `null` if no rated assets
+- `volatility` is always present with both sides. Each side has:
+  - `volatility`: value-weighted mean volatility (integer 0–100) or `null` if no rated assets
   - `ratedCount`: number of assets contributing to the average
   - `unratedCount`: number of assets excluded (picks, ungenerated players)
 - **Descriptive only** — never an input to scale, verdict, lean, or suggestions.
-- Current values are random placeholders until real computation lands (see roadmap).
+- Current volatility values are random placeholders until real computation lands (see roadmap).
 
 **Changes from previous version:**
 - **Empty side validation relaxed**: only rejects when **both** sides are empty (400: "At least one team needs an asset"). One empty side is now allowed — dropping in one player and immediately seeing what it takes to match him is the most natural first interaction.
@@ -282,8 +280,7 @@ The client must **never** build this string; one place, one format.
   "team": "MIN",
   "age": 27,
   "status": "active",
-  "boom_pct": 38,
-  "bust_pct": 21,
+  "volatility_pct": 38,
   "overallRank": 12,
   "positionalRank": 2,
   "positionalLabel": "WR2",
@@ -302,8 +299,8 @@ The client must **never** build this string; one place, one format.
 }
 ```
 
-- `boom_pct` / `bust_pct` are **integer percentages 0–100**, independent of each other and of the 1.0–1000.0 value scale.
-- For picks (`kind === 'pick'`), both are `null`.
-- For players not yet processed by the generator, both are `null` (not 0).
-- **Current values are random placeholders** — `npm run boom-bust:generate` fills them with deterministic seeded random integers 5–65. Real computation is deferred (see roadmap).
+- `volatility_pct` is an **integer percentage 0–100**, independent of the 1.0–1000.0 value scale. Higher means more week-to-week variance.
+- For picks (`kind === 'pick'`), it is `null`.
+- For players not yet processed by the generator, it is `null` (not 0).
+- **Current volatility values are random placeholders** — `npm run volatility:generate` fills them with deterministic seeded random integers 5–95. Real computation is deferred (see roadmap).
 - `overallRank`, `positionalRank`, and `positionalLabel` are populated only when a valid `leagueType` query param is supplied and the asset has a value row for that league type. They are `null` when: the `leagueType` param is missing or unknown, the asset is a pick in a redraft league type, or the asset has no `asset_values` row for that league type. `overallRank` and `positionalRank` are integers; `positionalLabel` is a string such as `"RB2"` or `"PICK3"`.

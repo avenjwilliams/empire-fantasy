@@ -1,7 +1,7 @@
 ---
 name: build
 description: "General-purpose fallback for cross-cutting work outside rankings/trade/ui domains (shared types, package.json, config)."
-model: opencode/nemotron-3-ultra-free
+model: opencode/deepseek-v4-flash-free
 permission:
   task:
     "*": deny

@@ -1,7 +1,7 @@
 ---
 name: trade-calculator
 description: "Owns the trade evaluation algorithm — convex value curve, depth discount, verdict scale. Pure/stateless: consumes current values, never writes to the database or adjustment_log. Downstream of rankings."
-model: opencode/nemotron-3-ultra-free
+model: opencode/deepseek-v4-flash-free
 mode: all
 permission:
   edit:

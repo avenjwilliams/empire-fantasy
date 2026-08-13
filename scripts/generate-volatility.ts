@@ -25,13 +25,11 @@ function seededRandom(seed: string, max: number): number {
   return Math.floor((state / m) * max);
 }
 
-function generateBoomBust(seed: string): { boom: number; bust: number } {
-  // Range 5-65 (inclusive) = 61 values, so max = 61, then +5
-  // These are PLACEHOLDER random numbers — not real boom/bust computations.
+function generateVolatility(seed: string): number {
+  // Range 5-95 (inclusive) = 91 values, so max = 91, then +5
+  // These are PLACEHOLDER random numbers — not real volatility computations.
   // Real computation will derive from weekly_stats against positional baselines.
-  const boom = seededRandom(seed + '|boom', 61) + 5;
-  const bust = seededRandom(seed + '|bust', 61) + 5;
-  return { boom, bust };
+  return seededRandom(seed + '|volatility', 91) + 5;
 }
 
 async function main() {
@@ -41,8 +39,8 @@ async function main() {
 
   try {
     // Get all players with their sleeper_id
-    const players = db.prepare('SELECT id, sleeper_id, boom_pct, bust_pct FROM players').all() as
-      { id: number; sleeper_id: string; boom_pct: number | null; bust_pct: number | null }[];
+    const players = db.prepare('SELECT id, sleeper_id, volatility_pct FROM players').all() as
+      { id: number; sleeper_id: string; volatility_pct: number | null }[];
 
     let filled = 0;
     let skipped = 0;
@@ -50,17 +48,17 @@ async function main() {
     // Wrap in a single transaction
     const tx = db.transaction(() => {
       for (const player of players) {
-        const needsGeneration = force || player.boom_pct === null || player.bust_pct === null;
+        const needsGeneration = force || player.volatility_pct === null;
 
         if (!needsGeneration) {
           skipped++;
           continue;
         }
 
-        const { boom, bust } = generateBoomBust(player.sleeper_id);
+        const volatility = generateVolatility(player.sleeper_id);
 
-        db.prepare('UPDATE players SET boom_pct = ?, bust_pct = ? WHERE id = ?')
-          .run(boom, bust, player.id);
+        db.prepare('UPDATE players SET volatility_pct = ? WHERE id = ?')
+          .run(volatility, player.id);
 
         filled++;
       }
@@ -68,7 +66,7 @@ async function main() {
 
     tx();
 
-    console.log(`Boom/bust generation complete: ${filled} players filled, ${skipped} skipped (already had values).`);
+    console.log(`Volatility generation complete: ${filled} players filled, ${skipped} skipped (already had values).`);
   } finally {
     closeDb();
   }

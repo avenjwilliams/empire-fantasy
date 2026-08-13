@@ -12,8 +12,8 @@ Living list of deferred features and next steps. Add new items here; move finish
 - **Light/dark theme toggle.**
 - **Top-asset ceiling pinning** — rank 1 seeds at 999.9 against a 1000.0 clamp, so the #1 asset has ~0.1 of upside (one vote) and the crowd can only move it down. Options to weigh later: lower the curve amplitude to reserve real headroom, or make the clamp ceiling soft.
 - **Multi-asset trade suggestions** — when no single asset can close the gap, suggest 2-asset packages that would even the trade. Build on the existing single-asset simulation infrastructure.
-- **Real boom/bust computation** — derive the ratings from `weekly_stats` against a positional baseline instead of random placeholders, and decide at that point whether they should vary by league type.
-- **Boom/bust-aware trade advice** — e.g. flagging when a contending roster is trading away floor for ceiling. Note that this would be the first place boom/bust influences anything prescriptive, and that it must remain separate from the value verdict.
+- **Real volatility computation** — derive `volatility_pct` from `weekly_stats` against a positional baseline instead of random placeholders, and decide at that point whether it should vary by league type.
+- **Volatility-aware trade advice** — e.g. flagging when a contending roster is trading away floor for ceiling. Note that this would be the first place volatility influences anything prescriptive, and that it must remain separate from the value verdict.
 - **Server-side sorting and pagination for Rankings** — when the result set outgrows a single client-side payload, move sort/paginate to the API with query parameters.
 
 ## Next steps

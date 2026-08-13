@@ -366,17 +366,9 @@ a:hover { text-decoration: underline; }
   width: 3rem;
 }
 
-.data-table .col-boom {
+.data-table .col-volatility {
   text-align: right;
   font-weight: 700;
-  color: var(--positive);
-  font-family: var(--font-mono);
-  min-width: 4.5ch; /* accommodate 100% (4 chars) */
-}
-.data-table .col-bust {
-  text-align: right;
-  font-weight: 700;
-  color: var(--negative);
   font-family: var(--font-mono);
   min-width: 4.5ch; /* accommodate 100% (4 chars) */
 }
@@ -644,66 +636,6 @@ a:hover { text-decoration: underline; }
 .disclosure__body {
   margin-bottom: 1.5rem;
 }
-
-/* ---- Boom / Bust ---- */
-.boom-bust {
-  background: var(--bg-raised);
-  border: 2px solid var(--border);
-  border-radius: var(--radius);
-  padding: 1rem 1.25rem;
-  margin-bottom: 1.5rem;
-}
-
-.boom-bust__tracks {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-
-.boom-bust__track {
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-}
-
-.boom-bust__label-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-}
-
-.boom-bust__label {
-  font-family: var(--font-mono);
-  font-size: 0.7rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-}
-.boom-bust__label--boom { color: var(--positive); }
-.boom-bust__label--bust  { color: var(--negative); }
-
-.boom-bust__value {
-  font-family: var(--font-mono);
-  font-size: 1.25rem;
-  font-weight: 700;
-}
-.boom-bust__value--boom { color: var(--positive); }
-.boom-bust__value--bust  { color: var(--negative); }
-
-.boom-bust__bar {
-  height: 14px;
-  background: var(--bg);
-  border: 2px solid var(--border);
-  border-radius: var(--radius);
-  overflow: hidden;
-}
-
-.boom-bust__fill {
-  height: 100%;
-  transition: width 0.3s ease-out;
-}
-.boom-bust__fill--boom { background: var(--positive); }
-.boom-bust__fill--bust  { background: var(--negative); }
 
 .value-grid {
   display: grid;
@@ -1760,8 +1692,8 @@ a:hover { text-decoration: underline; }
   background: var(--accent-dim);
 }
 
-/* ---- Boom/Bust Compare Panel ---- */
-.boom-bust-compare {
+/* ---- Volatility Compare Panel ---- */
+.volatility-compare {
   margin-top: 1rem;
   padding: 0.75rem 1rem;
   background: var(--bg-raised);
@@ -1770,7 +1702,7 @@ a:hover { text-decoration: underline; }
   font-family: var(--font-mono);
 }
 
-.boom-bust-compare__header {
+.volatility-compare__header {
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -1779,7 +1711,7 @@ a:hover { text-decoration: underline; }
   border-bottom: 1px solid var(--border);
 }
 
-.boom-bust-compare__label {
+.volatility-compare__label {
   font-size: 0.7rem;
   font-weight: 700;
   color: var(--ink-muted);
@@ -1788,7 +1720,7 @@ a:hover { text-decoration: underline; }
   min-width: 5rem;
 }
 
-.boom-bust-compare__col {
+.volatility-compare__col {
   font-size: 0.7rem;
   font-weight: 700;
   text-transform: uppercase;
@@ -1796,17 +1728,15 @@ a:hover { text-decoration: underline; }
   text-align: right;
   min-width: 4.5ch;
 }
-.boom-bust-compare__col--boom { color: var(--positive); }
-.boom-bust-compare__col--bust  { color: var(--negative); }
 
-.boom-bust-compare__row {
+.volatility-compare__row {
   display: flex;
   align-items: center;
   gap: 0.5rem;
   margin-bottom: 0.15rem;
 }
 
-.boom-bust-compare__side {
+.volatility-compare__side {
   font-size: 0.7rem;
   font-weight: 700;
   color: var(--ink-muted);
@@ -1815,16 +1745,14 @@ a:hover { text-decoration: underline; }
   min-width: 5rem;
 }
 
-.boom-bust-compare__val {
+.volatility-compare__val {
   font-size: 0.85rem;
   font-weight: 700;
   text-align: right;
   min-width: 4.5ch;
 }
-.boom-bust-compare__val--boom { color: var(--positive); }
-.boom-bust-compare__val--bust  { color: var(--negative); }
 
-.boom-bust-compare__coverage {
+.volatility-compare__coverage {
   margin-left: 5.5rem;
   margin-top: -0.15rem;
   margin-bottom: 0.35rem;
@@ -1833,7 +1761,7 @@ a:hover { text-decoration: underline; }
   font-family: var(--font-mono);
 }
 
-.boom-bust-compare__delta {
+.volatility-compare__delta {
   display: flex;
   gap: 1.5rem;
   margin-top: 0.5rem;
@@ -1841,13 +1769,13 @@ a:hover { text-decoration: underline; }
   border-top: 1px dashed var(--border);
 }
 
-.boom-bust-compare__delta-item {
+.volatility-compare__delta-item {
   font-size: 0.75rem;
   font-weight: 600;
   font-family: var(--font-mono);
+  /* No delta--pos / delta--neg here: a signed volatility difference has no
+     good/bad direction. Deliberate departure from the old boom/bust panel. */
 }
-.boom-bust-compare__delta-item.delta--pos { color: var(--positive); }
-.boom-bust-compare__delta-item.delta--neg { color: var(--negative); }
 
 /* ---- Responsive ---- */
 
@@ -1877,18 +1805,15 @@ a:hover { text-decoration: underline; }
   .player-hero__rings { align-self: center; gap: 1rem; }
   .ring svg { width: 72px; height: 72px; }
   .ring__pct { top: 22px; font-size: 1.1rem; }
-  .boom-bust { padding: 0.75rem 1rem; }
-  .boom-bust__value { font-size: 1.1rem; }
   .calc-result__details { flex-direction: column; gap: 0.5rem; align-items: center; }
-  .boom-bust-compare { padding: 0.5rem 0.75rem; }
-  .boom-bust-compare__header { gap: 0.35rem; }
-  .boom-bust-compare__col { min-width: 3.5ch; font-size: 0.65rem; }
-  .boom-bust-compare__val { min-width: 3.5ch; font-size: 0.8rem; }
-  .boom-bust-compare__delta { flex-direction: column; gap: 0.25rem; }
+  .volatility-compare { padding: 0.5rem 0.75rem; }
+  .volatility-compare__header { gap: 0.35rem; }
+  .volatility-compare__col { min-width: 3.5ch; font-size: 0.65rem; }
+  .volatility-compare__val { min-width: 3.5ch; font-size: 0.8rem; }
+  .volatility-compare__delta { flex-direction: column; gap: 0.25rem; }
   .data-table th { position: static; } /* disable sticky header on mobile for scroll */
-  /* Hide Boom/Bust columns on mobile - table is already wide, these are secondary */
-  .data-table .col-boom,
-  .data-table .col-bust { display: none; }
+  /* Hide the Volatility column on mobile - table is already wide, this is secondary */
+  .data-table .col-volatility { display: none; }
   .filters { gap: 0.4rem; }
   .filter-tabs { overflow-x: auto; flex-shrink: 0; }
   .search-input { min-width: 0; flex: 1; }

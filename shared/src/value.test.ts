@@ -5,7 +5,7 @@ import {
   getWeight,
   getVerdict,
   evaluateTrade,
-  computeSideBoomBust,
+  computeSideVolatility,
   rankToValue,
   computeTradeSuggestions,
   TRADE_CONSTANTS,
@@ -844,45 +844,41 @@ describe('value.ts', () => {
     });
   });
 
-  describe('computeSideBoomBust', () => {
-    it('returns null boom/bust for empty array', () => {
-      const result = computeSideBoomBust([]);
-      expect(result.boom).toBeNull();
-      expect(result.bust).toBeNull();
+  describe('computeSideVolatility', () => {
+    it('returns null volatility for empty array', () => {
+      const result = computeSideVolatility([]);
+      expect(result.volatility).toBeNull();
       expect(result.ratedCount).toBe(0);
       expect(result.unratedCount).toBe(0);
     });
 
-    it('returns null boom/bust for all unrated assets (picks)', () => {
-      const result = computeSideBoomBust([
-        { value: 500, boom_pct: null, bust_pct: null },
-        { value: 300, boom_pct: null, bust_pct: null },
+    it('returns null volatility for all unrated assets (picks)', () => {
+      const result = computeSideVolatility([
+        { value: 500, volatility_pct: null },
+        { value: 300, volatility_pct: null },
       ]);
-      expect(result.boom).toBeNull();
-      expect(result.bust).toBeNull();
+      expect(result.volatility).toBeNull();
       expect(result.ratedCount).toBe(0);
       expect(result.unratedCount).toBe(2);
     });
 
     it('computes value-weighted mean for single rated asset', () => {
-      const result = computeSideBoomBust([
-        { value: 900, boom_pct: 40, bust_pct: 20 },
+      const result = computeSideVolatility([
+        { value: 900, volatility_pct: 40 },
       ]);
-      expect(result.boom).toBe(40);
-      expect(result.bust).toBe(20);
+      expect(result.volatility).toBe(40);
       expect(result.ratedCount).toBe(1);
       expect(result.unratedCount).toBe(0);
     });
 
     it('computes value-weighted mean across multiple rated assets', () => {
-      // Two assets: 900 @ boom:40, 100 @ boom:80
+      // Two assets: 900 @ 40, 100 @ 80
       // Weighted mean = (900*40 + 100*80) / (900+100) = (36000 + 8000) / 1000 = 44
-      const result = computeSideBoomBust([
-        { value: 900, boom_pct: 40, bust_pct: 10 },
-        { value: 100, boom_pct: 80, bust_pct: 60 },
+      const result = computeSideVolatility([
+        { value: 900, volatility_pct: 40 },
+        { value: 100, volatility_pct: 80 },
       ]);
-      expect(result.boom).toBe(44); // Not 60 (plain mean)
-      expect(result.bust).toBe(15); // (900*10 + 100*60) / 1000 = 15
+      expect(result.volatility).toBe(44); // Not 60 (plain mean)
       expect(result.ratedCount).toBe(2);
       expect(result.unratedCount).toBe(0);
     });
@@ -890,54 +886,27 @@ describe('value.ts', () => {
     it('excludes unrated assets from numerator and denominator', () => {
       // One rated (500 @ 40), one unrated (500 @ null)
       // Weighted mean = 40, NOT 20
-      const result = computeSideBoomBust([
-        { value: 500, boom_pct: 40, bust_pct: 30 },
-        { value: 500, boom_pct: null, bust_pct: null },
+      const result = computeSideVolatility([
+        { value: 500, volatility_pct: 40 },
+        { value: 500, volatility_pct: null },
       ]);
-      expect(result.boom).toBe(40);
-      expect(result.bust).toBe(30);
+      expect(result.volatility).toBe(40);
       expect(result.ratedCount).toBe(1);
       expect(result.unratedCount).toBe(1);
     });
 
-    it('handles independent boom/bust nulls correctly', () => {
-      // In practice both are set together, but handle independently
-      const result = computeSideBoomBust([
-        { value: 500, boom_pct: 40, bust_pct: 30 },
-        { value: 500, boom_pct: 60, bust_pct: null },
-      ]);
-      // boom: both rated = (500*40 + 500*60) / 1000 = 50
-      // bust: only first rated = (500*30) / 500 = 30
-      expect(result.boom).toBe(50);
-      expect(result.bust).toBe(30);
-      expect(result.ratedCount).toBe(2); // both have at least one rating
-      expect(result.unratedCount).toBe(0);
-    });
-
     it('returns integer outputs', () => {
-      const result = computeSideBoomBust([
-        { value: 999, boom_pct: 33, bust_pct: 33 },
-        { value: 1, boom_pct: 67, bust_pct: 67 },
+      const result = computeSideVolatility([
+        { value: 999, volatility_pct: 33 },
+        { value: 1, volatility_pct: 67 },
       ]);
       // (999*33 + 1*67) / 1000 = 33.034 -> 33
-      expect(Number.isInteger(result.boom!)).toBe(true);
-      expect(Number.isInteger(result.bust!)).toBe(true);
-      expect(result.boom).toBe(33);
-      expect(result.bust).toBe(33);
-    });
-
-    it('handles boom+bust sum above 100 correctly and independently', () => {
-      const result = computeSideBoomBust([
-        { value: 500, boom_pct: 70, bust_pct: 60 },
-        { value: 500, boom_pct: 80, bust_pct: 50 },
-      ]);
-      expect(result.boom).toBe(75); // (500*70 + 500*80) / 1000 = 75
-      expect(result.bust).toBe(55); // (500*60 + 500*50) / 1000 = 55
-      expect(result.boom! + result.bust!).toBeGreaterThan(100);
+      expect(Number.isInteger(result.volatility!)).toBe(true);
+      expect(result.volatility).toBe(33);
     });
   });
 
-  describe('evaluateTrade with boom/bust', () => {
+  describe('evaluateTrade with volatility', () => {
     const baseTrade = {
       leagueType: 'DYN_SF_PPR_TEP' as const,
       team1: [{ id: 1, name: 'Star', value: 737.0 }],
@@ -947,102 +916,97 @@ describe('value.ts', () => {
       ],
     };
 
-    const baseTradeWithBoomBust = {
+    const baseTradeWithVolatility = {
       leagueType: 'DYN_SF_PPR_TEP' as const,
-      team1: [{ id: 1, name: 'Star', value: 737.0, boom_pct: 40, bust_pct: 25 }],
+      team1: [{ id: 1, name: 'Star', value: 737.0, volatility_pct: 40 }],
       team2: [
-        { id: 2, name: 'Harrison', value: 518.0, boom_pct: 55, bust_pct: 15 },
-        { id: 3, name: 'Stowers', value: 237.0, boom_pct: 60, bust_pct: 20 },
+        { id: 2, name: 'Harrison', value: 518.0, volatility_pct: 55 },
+        { id: 3, name: 'Stowers', value: 237.0, volatility_pct: 60 },
       ],
     };
 
-    // Primary regression guard: verdict must be bit-for-bit identical with and without boom/bust
+    // Primary regression guard: verdict must be bit-for-bit identical with and without volatility
     const verdictFields = ['scale', 'verdict', 'differencePct', 'adviceGap', 'valueAdjustment', 'valueAdjustmentSide'] as const;
 
     for (const field of verdictFields) {
-      it(`verdict unchanged: ${field} identical with and without boom/bust`, () => {
+      it(`verdict unchanged: ${field} identical with and without volatility`, () => {
         const without = evaluateTrade(baseTrade);
-        const withBoomBust = evaluateTrade(baseTradeWithBoomBust);
-        expect(withBoomBust[field]).toBe(without[field]);
+        const withVolatility = evaluateTrade(baseTradeWithVolatility);
+        expect(withVolatility[field]).toBe(without[field]);
       });
     }
 
-    it('boomBust field is always present with SideBoomBust objects for both sides', () => {
-      const result = evaluateTrade(baseTradeWithBoomBust);
-      expect(result.boomBust).toBeDefined();
-      expect(result.boomBust.team1).toBeDefined();
-      expect(result.boomBust.team2).toBeDefined();
-      expect(typeof result.boomBust.team1.boom).toBe('number');
-      expect(typeof result.boomBust.team1.bust).toBe('number');
-      expect(typeof result.boomBust.team2.boom).toBe('number');
-      expect(typeof result.boomBust.team2.bust).toBe('number');
+    it('volatility field is always present with SideVolatility objects for both sides', () => {
+      const result = evaluateTrade(baseTradeWithVolatility);
+      expect(result.volatility).toBeDefined();
+      expect(result.volatility.team1).toBeDefined();
+      expect(result.volatility.team2).toBeDefined();
+      expect(typeof result.volatility.team1.volatility).toBe('number');
+      expect(typeof result.volatility.team2.volatility).toBe('number');
     });
 
     it('computes correct weighted averages for McMillan/Harrison+Stowers fixture', () => {
-      const result = evaluateTrade(baseTradeWithBoomBust);
-      const t1 = result.boomBust.team1;
-      const t2 = result.boomBust.team2;
+      const result = evaluateTrade(baseTradeWithVolatility);
+      const t1 = result.volatility.team1;
+      const t2 = result.volatility.team2;
 
-      // Team 1: single asset 737 @ boom:40, bust:25 -> boom=40, bust=25
-      expect(t1.boom).toBe(40);
-      expect(t1.bust).toBe(25);
+      // Team 1: single asset 737 @ 40 -> volatility = 40
+      expect(t1.volatility).toBe(40);
       expect(t1.ratedCount).toBe(1);
       expect(t1.unratedCount).toBe(0);
 
-      // Team 2: 518 @ 55/15 + 237 @ 60/20
-      // boom = (518*55 + 237*60) / (518+237) = (28490 + 14220) / 755 = 42910/755 = 56.83 -> 57
-      // bust = (518*15 + 237*20) / 755 = (7770 + 4740) / 755 = 12510/755 = 16.57 -> 17
-      expect(t2.boom).toBe(57);
-      expect(t2.bust).toBe(17);
+      // Team 2: 518 @ 55 + 237 @ 60
+      // volatility = (518*55 + 237*60) / (518+237) = (28490 + 14220) / 755 = 42910/755 = 56.83 -> 57
+      expect(t2.volatility).toBe(57);
       expect(t2.ratedCount).toBe(2);
       expect(t2.unratedCount).toBe(0);
     });
 
-    it('empty side returns well-formed SideBoomBust with nulls and zero counts', () => {
+    it('empty side returns well-formed SideVolatility with null and zero counts', () => {
       const result = evaluateTrade({
         leagueType: 'DYN_SF_PPR_TEP',
-        team1: [{ id: 1, name: 'Star', value: 900.0, boom_pct: 50, bust_pct: 30 }],
+        team1: [{ id: 1, name: 'Star', value: 900.0, volatility_pct: 50 }],
         team2: [],
       });
-      expect(result.boomBust.team1.boom).toBe(50);
-      expect(result.boomBust.team1.ratedCount).toBe(1);
-      expect(result.boomBust.team2.boom).toBeNull();
-      expect(result.boomBust.team2.bust).toBeNull();
-      expect(result.boomBust.team2.ratedCount).toBe(0);
-      expect(result.boomBust.team2.unratedCount).toBe(0);
+      expect(result.volatility.team1.volatility).toBe(50);
+      expect(result.volatility.team1.ratedCount).toBe(1);
+      expect(result.volatility.team1.unratedCount).toBe(0);
+      expect(result.volatility.team2.volatility).toBeNull();
+      expect(result.volatility.team2.ratedCount).toBe(0);
+      expect(result.volatility.team2.unratedCount).toBe(0);
       // Trade still produces finite scale
       expect(Number.isFinite(result.scale)).toBe(true);
     });
 
-    it('all-picks side returns null boom/bust', () => {
+    it('all-picks side returns null volatility', () => {
       const result = evaluateTrade({
         leagueType: 'DYN_SF_PPR_TEP',
-        team1: [{ id: 1, name: 'Star', value: 900.0, boom_pct: 50, bust_pct: 30 }],
+        team1: [{ id: 1, name: 'Star', value: 900.0, volatility_pct: 50 }],
         team2: [
-          { id: 2, name: 'Pick 1', value: 500.0, boom_pct: null, bust_pct: null },
-          { id: 3, name: 'Pick 2', value: 300.0, boom_pct: null, bust_pct: null },
+          { id: 2, name: 'Pick 1', value: 500.0, volatility_pct: null },
+          { id: 3, name: 'Pick 2', value: 300.0, volatility_pct: null },
         ],
       });
-      expect(result.boomBust.team1.boom).toBe(50);
-      expect(result.boomBust.team2.boom).toBeNull();
-      expect(result.boomBust.team2.bust).toBeNull();
-      expect(result.boomBust.team2.ratedCount).toBe(0);
-      expect(result.boomBust.team2.unratedCount).toBe(2);
+      expect(result.volatility.team1.volatility).toBe(50);
+      expect(result.volatility.team1.ratedCount).toBe(1);
+      expect(result.volatility.team2.volatility).toBeNull();
+      expect(result.volatility.team2.ratedCount).toBe(0);
+      expect(result.volatility.team2.unratedCount).toBe(2);
     });
 
-    it('suggestions array is identical with and without boom/bust', () => {
+    it('suggestions array is identical with and without volatility', () => {
       const inputWithout = {
         ...baseTrade,
-        team1: baseTrade.team1.map(a => ({ ...a, boom_pct: undefined, bust_pct: undefined })),
-        team2: baseTrade.team2.map(a => ({ ...a, boom_pct: undefined, bust_pct: undefined })),
+        team1: baseTrade.team1.map(a => ({ ...a, volatility_pct: undefined })),
+        team2: baseTrade.team2.map(a => ({ ...a, volatility_pct: undefined })),
       };
-      const inputWith = baseTradeWithBoomBust;
+      const inputWith = baseTradeWithVolatility;
 
       const resultWithout = evaluateTrade(inputWithout);
       const resultWith = evaluateTrade(inputWith);
 
       // Suggestions are computed server-side by calling evaluateTrade again
-      // The client test ensures the evaluateTrade itself doesn't leak boom/bust into suggestions
+      // The client test ensures the evaluateTrade itself doesn't leak volatility into suggestions
       // Here we verify the structure is identical
       expect(resultWith.suggestions).toEqual(resultWithout.suggestions);
     });

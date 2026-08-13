@@ -1,4 +1,4 @@
-import type { TradeAsset, TradeSide, TradeResult, Verdict, Position, RecScoring, TEPSetting, Format, TradeSuggestion, SideBoomBust } from './types.js';
+import type { TradeAsset, TradeSide, TradeResult, Verdict, Position, RecScoring, TEPSetting, Format, TradeSuggestion, SideVolatility } from './types.js';
 import {
   SCORING, REC_BONUS, TEP_BONUS,
   STAT_SENSITIVITY, STAT_CAP, AGE_NUDGE,
@@ -134,50 +134,36 @@ function computeAdviceGap(diff: number, losingAssetCount: number): number | null
 }
 
 /**
- * Compute value-weighted mean boom/bust for a side.
+ * Compute value-weighted mean volatility for a side.
  * Weight is raw value (not depth weight), excludes unrated assets.
- * Returns null for boom/bust when no rated assets.
- * Boom and bust are independent — each uses its own denominator.
+ * Returns null for volatility when no rated assets.
  */
-export function computeSideBoomBust(
-  assets: { value: number; boom_pct: number | null; bust_pct: number | null }[]
-): SideBoomBust {
-  let boomNumerator = 0;
-  let bustNumerator = 0;
-  let boomDenominator = 0;
-  let bustDenominator = 0;
+export function computeSideVolatility(
+  assets: { value: number; volatility_pct: number | null }[]
+): SideVolatility {
+  let numerator = 0;
+  let denominator = 0;
   let ratedCount = 0;
   let unratedCount = 0;
 
   for (const asset of assets) {
-    const hasBoom = asset.boom_pct !== null;
-    const hasBust = asset.bust_pct !== null;
-
-    if (!hasBoom && !hasBust) {
+    if (asset.volatility_pct === null) {
       unratedCount++;
       continue;
     }
 
     ratedCount++;
-
-    if (hasBoom) {
-      boomNumerator += asset.value * asset.boom_pct!;
-      boomDenominator += asset.value;
-    }
-    if (hasBust) {
-      bustNumerator += asset.value * asset.bust_pct!;
-      bustDenominator += asset.value;
-    }
+    numerator += asset.value * asset.volatility_pct;
+    denominator += asset.value;
   }
 
   if (ratedCount === 0) {
     // No assets with any rating at all
-    return { boom: null, bust: null, ratedCount: 0, unratedCount };
+    return { volatility: null, ratedCount: 0, unratedCount };
   }
 
   return {
-    boom: boomDenominator > 0 ? Math.round(boomNumerator / boomDenominator) : null,
-    bust: bustDenominator > 0 ? Math.round(bustNumerator / bustDenominator) : null,
+    volatility: denominator > 0 ? Math.round(numerator / denominator) : null,
     ratedCount,
     unratedCount,
   };
@@ -185,8 +171,8 @@ export function computeSideBoomBust(
 
 export interface EvaluateTradeInput {
   leagueType: string;
-  team1: { id: number; name: string; value: number; boom_pct?: number | null; bust_pct?: number | null }[];
-  team2: { id: number; name: string; value: number; boom_pct?: number | null; bust_pct?: number | null }[];
+  team1: { id: number; name: string; value: number; volatility_pct?: number | null }[];
+  team2: { id: number; name: string; value: number; volatility_pct?: number | null }[];
 }
 
 /**
@@ -269,9 +255,9 @@ export function evaluateTrade(input: EvaluateTradeInput): TradeResult {
   const valueAdjustment = adjustment;
   const valueAdjustmentSide = adjustmentSide;
 
-  // Compute boom/bust averages for each side (descriptive only, never affects verdict)
-  const team1BoomBust = computeSideBoomBust(team1.map(a => ({ value: a.value, boom_pct: a.boom_pct ?? null, bust_pct: a.bust_pct ?? null })));
-  const team2BoomBust = computeSideBoomBust(team2.map(a => ({ value: a.value, boom_pct: a.boom_pct ?? null, bust_pct: a.bust_pct ?? null })));
+  // Compute volatility averages for each side (descriptive only, never affects verdict)
+  const team1Volatility = computeSideVolatility(team1.map(a => ({ value: a.value, volatility_pct: a.volatility_pct ?? null })));
+  const team2Volatility = computeSideVolatility(team2.map(a => ({ value: a.value, volatility_pct: a.volatility_pct ?? null })));
 
   return {
     leagueType,
@@ -284,9 +270,9 @@ export function evaluateTrade(input: EvaluateTradeInput): TradeResult {
     valueAdjustment,
     valueAdjustmentSide,
     suggestions: [], // Will be populated by the server route after fetching candidates
-    boomBust: {
-      team1: team1BoomBust,
-      team2: team2BoomBust,
+    volatility: {
+      team1: team1Volatility,
+      team2: team2Volatility,
     },
   };
 }

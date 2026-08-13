@@ -33,8 +33,7 @@ interface AssetDetail {
   team: string | null;
   age: number | null;
   status: string | null;
-  boom_pct: number | null;
-  bust_pct: number | null;
+  volatility_pct: number | null;
   overallRank: number | null;
   positionalRank: number | null;
   positionalLabel: string | null;
@@ -147,7 +146,7 @@ export default function PlayerDetail() {
         )}
       </div>
 
-      {/* Hero row: value + rings (players) / value alone (picks) */}
+      {/* Hero row: value + volatility ring (players) / value alone (picks) */}
       {currentValue && (
         <div className="player-hero">
           <div>
@@ -156,8 +155,7 @@ export default function PlayerDetail() {
           </div>
           {!isPick && (
             <div className="player-hero__rings">
-              <Ring pct={data.boom_pct} color="var(--positive)" label="BOOM" />
-              <Ring pct={data.bust_pct} color="var(--negative)" label="BUST" />
+              <Ring pct={data.volatility_pct} color="var(--accent)" label="VOL" />
             </div>
           )}
         </div>

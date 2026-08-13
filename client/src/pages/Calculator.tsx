@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useRef } from 'react';
 import { useLeagueType } from '../context/LeagueTypeContext.js';
 import AssetSearch from '../components/AssetSearch.js';
 import TradeScale from '../components/TradeScale.js';
-import { getWeight, computeTradeSuggestions, type TradeSuggestion, type SideBoomBust } from '@empire-fantasy/shared';
+import { getWeight, computeTradeSuggestions, type TradeSuggestion, type SideVolatility } from '@empire-fantasy/shared';
 
 interface SelectedAsset {
   asset_id: number;
@@ -39,9 +39,9 @@ interface TradeResult {
   valueAdjustment: number | null;
   valueAdjustmentSide: 1 | 2 | null;
   suggestions: TradeSuggestion[];
-  boomBust: {
-    team1: SideBoomBust;
-    team2: SideBoomBust;
+  volatility: {
+    team1: SideVolatility;
+    team2: SideVolatility;
   };
 }
 
@@ -324,61 +324,47 @@ export default function Calculator() {
             )}
           </div>
 
-          {/* Boom / Bust Profile Panel */}
+          {/* Volatility Profile Panel */}
           {(() => {
-            const bb1 = result.boomBust.team1;
-            const bb2 = result.boomBust.team2;
-            const hasAnyRated = (bb1.ratedCount > 0 || bb2.ratedCount > 0);
+            const v1 = result.volatility.team1;
+            const v2 = result.volatility.team2;
+            const hasAnyRated = (v1.ratedCount > 0 || v2.ratedCount > 0);
             if (!hasAnyRated) return null;
 
-            const showBoomDelta = bb1.boom !== null && bb2.boom !== null;
-            const showBustDelta = bb1.bust !== null && bb2.bust !== null;
-            const boomDelta = showBoomDelta ? (bb2.boom! - bb1.boom!) : null;
-            const bustDelta = showBustDelta ? (bb2.bust! - bb1.bust!) : null;
+            const showVolDelta = v1.volatility !== null && v2.volatility !== null;
+            const volDelta = showVolDelta ? (v2.volatility! - v1.volatility!) : null;
 
             return (
-              <div className="boom-bust-compare">
-                <div className="boom-bust-compare__header">
-                  <span className="boom-bust-compare__label"></span>
-                  <span className="boom-bust-compare__col boom-bust-compare__col--boom">BOOM</span>
-                  <span className="boom-bust-compare__col boom-bust-compare__col--bust">BUST</span>
+              <div className="volatility-compare">
+                <div className="volatility-compare__header">
+                  <span className="volatility-compare__label"></span>
+                  <span className="volatility-compare__col">VOL</span>
                 </div>
-                <div className="boom-bust-compare__row">
-                  <span className="boom-bust-compare__side">TEAM 1</span>
-                  <span className="boom-bust-compare__val boom-bust-compare__val--boom">
-                    {bb1.boom !== null ? `${bb1.boom}%` : '—'}
-                  </span>
-                  <span className="boom-bust-compare__val boom-bust-compare__val--bust">
-                    {bb1.bust !== null ? `${bb1.bust}%` : '—'}
+                <div className="volatility-compare__row">
+                  <span className="volatility-compare__side">TEAM 1</span>
+                  <span className="volatility-compare__val">
+                    {v1.volatility !== null ? `${v1.volatility}%` : '—'}
                   </span>
                 </div>
-                {bb1.unratedCount > 0 && (
-                  <div className="boom-bust-compare__coverage">excludes {bb1.unratedCount} unrated</div>
+                {v1.unratedCount > 0 && (
+                  <div className="volatility-compare__coverage">excludes {v1.unratedCount} unrated</div>
                 )}
-                <div className="boom-bust-compare__row">
-                  <span className="boom-bust-compare__side">TEAM 2</span>
-                  <span className="boom-bust-compare__val boom-bust-compare__val--boom">
-                    {bb2.boom !== null ? `${bb2.boom}%` : '—'}
-                  </span>
-                  <span className="boom-bust-compare__val boom-bust-compare__val--bust">
-                    {bb2.bust !== null ? `${bb2.bust}%` : '—'}
+                <div className="volatility-compare__row">
+                  <span className="volatility-compare__side">TEAM 2</span>
+                  <span className="volatility-compare__val">
+                    {v2.volatility !== null ? `${v2.volatility}%` : '—'}
                   </span>
                 </div>
-                {bb2.unratedCount > 0 && (
-                  <div className="boom-bust-compare__coverage">excludes {bb2.unratedCount} unrated</div>
+                {v2.unratedCount > 0 && (
+                  <div className="volatility-compare__coverage">excludes {v2.unratedCount} unrated</div>
                 )}
-                {(showBoomDelta || showBustDelta) && (
-                  <div className="boom-bust-compare__delta">
-                    {showBoomDelta && (
-                      <span className={`boom-bust-compare__delta-item ${boomDelta! > 0 ? 'delta--pos' : boomDelta! < 0 ? 'delta--neg' : ''}`}>
-                        Team 2 gets {boomDelta! > 0 ? '+' : ''}{boomDelta} boom
-                      </span>
-                    )}
-                    {showBustDelta && (
-                      <span className={`boom-bust-compare__delta-item ${bustDelta! > 0 ? 'delta--pos' : bustDelta! < 0 ? 'delta--neg' : ''}`}>
-                        Team 2 gets {bustDelta! > 0 ? '+' : ''}{bustDelta} bust
-                      </span>
-                    )}
+                {showVolDelta && (
+                  <div className="volatility-compare__delta">
+                    {/* Signed volatility difference has no good/bad direction — deliberate departure
+                        from the old boom/bust panel, which used delta--pos / delta--neg here. */}
+                    <span className="volatility-compare__delta-item">
+                      Team 2 gets {volDelta! > 0 ? '+' : ''}{volDelta} volatility
+                    </span>
                   </div>
                 )}
               </div>

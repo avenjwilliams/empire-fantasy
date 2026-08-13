@@ -76,14 +76,13 @@ router.post('/evaluate', (req, res) => {
         CASE WHEN a.kind = 'player' THEN p.position ELSE 'PICK' END as position,
         p.team,
         av.value,
-        CASE WHEN a.kind = 'player' THEN p.boom_pct ELSE NULL END as boom_pct,
-        CASE WHEN a.kind = 'player' THEN p.bust_pct ELSE NULL END as bust_pct
+        CASE WHEN a.kind = 'player' THEN p.volatility_pct ELSE NULL END as volatility_pct
       FROM assets a
       LEFT JOIN players p ON a.player_id = p.id
       LEFT JOIN picks pk ON a.pick_id = pk.id
       JOIN asset_values av ON av.asset_id = a.id AND av.league_type_id = ?
       WHERE a.id IN (${placeholders})
-    `).all(lt.id, ...ids) as { id: number; kind: string; name: string; position: string; team: string | null; value: number; boom_pct: number | null; bust_pct: number | null }[];
+    `).all(lt.id, ...ids) as { id: number; kind: string; name: string; position: string; team: string | null; value: number; volatility_pct: number | null }[];
   };
 
   const t1Assets = fetchAssets(team1);

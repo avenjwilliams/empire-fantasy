@@ -9,23 +9,21 @@ interface RankingRow {
   position: string;
   team: string | null;
   age: number | null;
-  boom_pct: number | null;
-  bust_pct: number | null;
+  volatility_pct: number | null;
   value: number;
   overallRank: number;
   positionalRank: number;
   positionalLabel: string;
 }
 
-type SortableColumn = 'value' | 'boom_pct' | 'bust_pct' | 'age';
+type SortableColumn = 'value' | 'volatility_pct' | 'age';
 type SortDirection = 'desc' | 'asc' | 'none';
 
 const POSITION_TABS = ['ALL', 'QB', 'RB', 'WR', 'TE'];
 
 const SORTABLE_COLUMNS: { key: SortableColumn; label: string }[] = [
   { key: 'value', label: 'Value' },
-  { key: 'boom_pct', label: 'Boom' },
-  { key: 'bust_pct', label: 'Bust' },
+  { key: 'volatility_pct', label: 'Volatility' },
   { key: 'age', label: 'Age' },
 ];
 
@@ -179,8 +177,7 @@ export default function Rankings() {
                 <th className="col-pos">Pos</th>
                 <th>Team</th>
                 <th>Age</th>
-                <th className="col-boom">Boom</th>
-                <th className="col-bust">Bust</th>
+                <th className="col-volatility">VOL</th>
                 <th className="col-value">Value</th>
               </tr>
               <tr>
@@ -206,21 +203,11 @@ export default function Rankings() {
                 <th>
                   <button
                     className="sortable-header"
-                    onClick={() => handleSort('boom_pct')}
-                    aria-sort={getAriaSort(sortColumn === 'boom_pct' ? sortDirection : 'none')}
-                    aria-label="Sort by Boom"
+                    onClick={() => handleSort('volatility_pct')}
+                    aria-sort={getAriaSort(sortColumn === 'volatility_pct' ? sortDirection : 'none')}
+                    aria-label="Sort by Volatility"
                   >
-                    {sortColumn === 'boom_pct' ? getSortIndicator(sortDirection) : ''}
-                  </button>
-                </th>
-                <th>
-                  <button
-                    className="sortable-header"
-                    onClick={() => handleSort('bust_pct')}
-                    aria-sort={getAriaSort(sortColumn === 'bust_pct' ? sortDirection : 'none')}
-                    aria-label="Sort by Bust"
-                  >
-                    {sortColumn === 'bust_pct' ? getSortIndicator(sortDirection) : ''}
+                    {sortColumn === 'volatility_pct' ? getSortIndicator(sortDirection) : ''}
                   </button>
                 </th>
                 <th>
@@ -251,8 +238,7 @@ export default function Rankings() {
                   </td>
                   <td>{row.team || '—'}</td>
                   <td>{row.age ?? '—'}</td>
-                  <td className="col-boom">{row.boom_pct !== null ? `${row.boom_pct}%` : '—'}</td>
-                  <td className="col-bust">{row.bust_pct !== null ? `${row.bust_pct}%` : '—'}</td>
+                  <td className="col-volatility">{row.volatility_pct !== null ? `${row.volatility_pct}%` : '—'}</td>
                   <td className="col-value">{row.value.toFixed(1)}</td>
                 </tr>
               ))}
